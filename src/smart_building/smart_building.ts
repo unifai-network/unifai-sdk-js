@@ -58,6 +58,36 @@ export class SmartBuilding extends EventEmitter {
   }
 
   /**
+   * Update the building's name and/or description.
+   * 
+   * @param name - Optional new name for the building
+   * @param description - Optional new description for the building
+   */
+  public async updateBuilding(name?: string, description?: string): Promise<void> {
+    const data: {
+      buildingID: number;
+      name?: string;
+      description?: string;
+    } = {
+      buildingID: this.buildingId
+    };
+
+    if (name) {
+      data.name = name;
+    }
+    if (description) {
+      data.description = description;
+    }
+
+    const message = {
+      type: 'updateBuilding',
+      data: data
+    };
+
+    this.ws?.send(JSON.stringify(message));
+  }
+
+  /**
    * Start the smart building client.
    */
   public run(): void {

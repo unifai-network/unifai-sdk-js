@@ -1,12 +1,13 @@
 import { SmartBuilding, ActionContext } from 'agiverse';
 
 const building = new SmartBuilding({
-  apiKey: 'YOUR_API_KEY',
-  buildingId: 'YOUR_BUILDING_ID',
+  apiKey: 'Your API Key',
+  buildingId: xxx,
 });
 
-building.on('ready', () => {
+building.on('ready', async () => {
   console.log(`Smart building ${building.buildingId} is ready to use`);
+  await building.updateBuilding('Echo Slam', `What's in, what's out.`);
 });
 
 building.on('buildingInfo', (buildingInfo) => {

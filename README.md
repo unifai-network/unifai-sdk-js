@@ -51,6 +51,12 @@ building.on('ready', () => {
 });
 ```
 
+Update the building name and/or description:
+
+```typescript
+await building.updateBuilding('Echo Slam', `What's in, what's out.`);
+```
+
 Register action handlers:
 
 ```typescript
