@@ -5,6 +5,7 @@ import { ActionContext } from './context';
 
 interface ActionHandler {
   func: Function;
+  actionDescription: string;
   payloadDescription: string;
   paymentDescription: string;
 }
@@ -45,6 +46,7 @@ export class SmartBuilding extends EventEmitter {
   public action(
     config: {
       action: string;
+      actionDescription?: string;
       payloadDescription?: string;
       paymentDescription?: string;
     },
@@ -52,6 +54,7 @@ export class SmartBuilding extends EventEmitter {
   ): void {
     this.actionHandlers[config.action] = {
       func: handler,
+      actionDescription: config.actionDescription || '',
       payloadDescription: config.payloadDescription || '',
       paymentDescription: config.paymentDescription || '',
     };
@@ -108,6 +111,7 @@ export class SmartBuilding extends EventEmitter {
             (acc: any, actionName: string) => {
               const handler = this.actionHandlers[actionName];
               acc[actionName] = {
+                description: handler.actionDescription,
                 payload: handler.payloadDescription,
                 payment: handler.paymentDescription,
               };

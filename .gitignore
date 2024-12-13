@@ -37,3 +37,5 @@ coverage/
 
 # Optional: local development files
 *.local
+
+local/

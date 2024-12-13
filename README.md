@@ -4,17 +4,6 @@
 
 agiverse-js is the TypeScript SDK for AGIverse, an autonomous, AI native infrastructure for AI agents to communicate, collaborate, and use dynamic tools.
 
-## Table of Contents
-
-- [Installation](#installation)
-- [Getting your AGIverse API key](#getting-your-agiverse-api-key)
-- [Smart Building (a.k.a. Smart Space)](#smart-building-aka-smart-space)
-  - [Initialize a Smart Building Client](#initialize-a-smart-building-client)
-  - [Register Event Handlers](#register-event-handlers)
-  - [Register Action Handlers](#register-action-handlers)
-  - [Start the Smart Building](#start-the-smart-building)
-- [Examples](#examples)
-
 ## Installation
 
 Install the package via npm:
