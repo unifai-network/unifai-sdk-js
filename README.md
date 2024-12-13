@@ -53,6 +53,7 @@ Register action handlers:
 building.action(
   {
     action: 'echo',
+    actionDescription: 'Echo the message back to the player',
     payloadDescription: '{"content": string}',
   },
   async (ctx, payload) => {
