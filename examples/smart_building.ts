@@ -57,7 +57,12 @@ building.action(
 building.action(
   {
     action: 'withdraw',
-    payloadDescription: '{"content": string}',
+    payloadDescription: {
+      content: {
+        type: 'string',
+        description: 'The content of the message',
+      },
+    },
   },
   async (ctx: ActionContext, payload: EchoPayload) => {
     // Do something

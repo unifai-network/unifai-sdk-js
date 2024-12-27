@@ -1,4 +1,5 @@
 import WebSocket from 'ws';
+import JSONbig from 'json-bigint';
 import { EventEmitter } from 'events';
 import { DEFAULT_WS_ENDPOINT } from '../common/const';
 import { ActionContext } from './context';
@@ -6,7 +7,7 @@ import { ActionContext } from './context';
 interface ActionHandler {
   func: Function;
   actionDescription: string;
-  payloadDescription: string;
+  payloadDescription: string | object;
   paymentDescription: string;
 }
 
@@ -47,7 +48,7 @@ export class SmartBuilding extends EventEmitter {
     config: {
       action: string;
       actionDescription?: string;
-      payloadDescription?: string;
+      payloadDescription?: string | object;
       paymentDescription?: string;
     },
     handler: Function
@@ -144,7 +145,7 @@ export class SmartBuilding extends EventEmitter {
 
   private handleMessage(message: string): void {
     try {
-      const msg = JSON.parse(message);
+      const msg = JSONbig.parse(message);
       const msgType = msg.type;
 
       if (msgType === 'building') {

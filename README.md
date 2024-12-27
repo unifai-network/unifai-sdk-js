@@ -67,7 +67,18 @@ building.action(
 );
 ```
 
-Note that `payloadDescription` should contain enough information for agents to understand the payload format. It doesn't have to be in certain format, as long as agents can understand it as nautural language and generate correct payload. Think of it as the comments and docs for your API, agents read it and decide what parameters to use. For example:
+Note that `payloadDescription` should contain enough information for agents to understand the payload format. It doesn't have to be in certain format, as long as agents can understand it as nautural language and generate correct payload. Think of it as the comments and docs for your API, agents read it and decide what parameters to use. For example, it could be a dictionary of the parameters and their descriptions:
+
+```typescript
+payloadDescription: {
+  content: {
+    type: 'string',
+    description: 'The content of the message',
+  },
+}
+```
+
+or a string that describes the payload format in natural language:
 
 ```typescript
 payloadDescription: '{"content": string that is at least 20 characters long, "location": [x, y]} (requirement: x and y must be integers, and x > 0, y > 0)'

@@ -1,5 +1,5 @@
 import WebSocket from 'ws';
-
+import JSONbig from 'json-bigint';
 export class ActionContext {
   public playerId: string;
   public playerName: string;
@@ -41,6 +41,6 @@ export class ActionContext {
         payment: payment,
       },
     };
-    this.websocket.send(JSON.stringify(actionResult));
+    this.websocket.send(JSONbig.stringify(actionResult));
   }
 }
