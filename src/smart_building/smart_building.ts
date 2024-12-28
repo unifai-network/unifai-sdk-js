@@ -128,8 +128,8 @@ export class SmartBuilding extends EventEmitter {
       this.emit('ready');
     });
 
-    this.ws.on('message', (data: WebSocket.Data) => {
-      this.handleMessage(data.toString());
+    this.ws.on('message', async (data: WebSocket.Data) => {
+      await this.handleMessage(data.toString());
     });
 
     this.ws.on('close', () => {
@@ -143,7 +143,7 @@ export class SmartBuilding extends EventEmitter {
     });
   }
 
-  private handleMessage(message: string): void {
+  private async handleMessage(message: string): Promise<void> {
     try {
       const msg = JSONbig.parse(message);
       const msgType = msg.type;
@@ -170,21 +170,24 @@ export class SmartBuilding extends EventEmitter {
           const payload = msg.data.payload;
           const payment = msg.data.payment;
 
-          if (handler.func.length === 2) {
-            handler.func(ctx, payload);
-          } else if (handler.func.length === 3) {
-            handler.func(ctx, payload, payment);
-          } else {
-            console.warn(
-              `Handler for action '${actionName}' has an unexpected number of parameters`
-            );
+          try {
+            if (handler.func.length === 2) {
+              await handler.func(ctx, payload);
+            } else if (handler.func.length === 3) {
+              await handler.func(ctx, payload, payment);
+            } else {
+              console.error(`Handler for action '${actionName}' has an unexpected number of parameters`);
+            }
+          } catch (error) {
+            console.error(`Error handling action '${actionName}', please consider adding error handling and notify the caller:`, error);
+            await ctx.sendResult({ error: "An unexpected error occurred, please report to the smart tool developer" });
           }
         } else {
           console.warn(`No handler for action '${actionName}'`);
         }
       }
     } catch (error) {
-      console.error('Failed to handle message:', error);
+      console.warn('Failed to handle message:', error);
     }
   }
 }

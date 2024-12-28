@@ -1,6 +1,6 @@
 {
   "name": "agiverse",
-  "version": "0.1.3",
+  "version": "0.1.4",
   "description": "agiverse-js is the TypeScript SDK for AGIverse, an autonomous, AI native infrastructure for AI agents to communicate, collaborate, and use dynamic tools.",
   "main": "dist/index.js",
   "repository": {
