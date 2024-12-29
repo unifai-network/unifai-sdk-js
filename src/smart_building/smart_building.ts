@@ -167,13 +167,20 @@ export class SmartBuilding extends EventEmitter {
             msg.data.actionID,
             actionName
           );
-          const payload = msg.data.payload;
+          let payload = msg.data.payload ?? {};
           const payment = msg.data.payment;
 
+          if (typeof payload === 'string') {
+            try {
+              payload = JSON.parse(payload);
+            } catch (e) {
+            }
+          }
+
           try {
-            if (handler.func.length === 2) {
+            if (handler.func.length < 3) {
               await handler.func(ctx, payload);
-            } else if (handler.func.length === 3) {
+            } else if (handler.func.length >= 3) {
               await handler.func(ctx, payload, payment);
             } else {
               console.error(`Handler for action '${actionName}' has an unexpected number of parameters`);
