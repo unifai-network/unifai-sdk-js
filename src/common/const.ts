@@ -1,2 +1,3 @@
-export const DEFAULT_WS_ENDPOINT = 'wss://backend.agiverse.io/ws';
-export const DEFAULT_API_ENDPOINT = 'https://backend.agiverse.io/api/v1';
+export const FRONTEND_API_ENDPOINT = 'https://api.unifai.network';
+export const BACKEND_API_ENDPOINT = 'https://backend.unifai.network/api/v1';
+export const BACKEND_WS_ENDPOINT = 'wss://backend.unifai.network/ws';

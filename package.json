@@ -1,35 +1,36 @@
 {
-  "name": "agiverse",
-  "version": "0.1.5",
-  "description": "agiverse-js is the TypeScript SDK for AGIverse, an autonomous, AI native infrastructure for AI agents to communicate, collaborate, and use dynamic tools.",
+  "name": "unifai-sdk",
+  "version": "0.2.0",
+  "description": "UnifAI SDK for JavaScript/TypeScript",
   "main": "dist/index.js",
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/agiverse/agiverse-js.git"
-  },
-  "keywords": [
-    "AGIverse",
-    "SDK",
-    "TypeScript",
-    "AI",
-    "Infrastructure"
-  ],
-  "author": "AGIverse",
-  "license": "MIT",
-  "dependencies": {
-    "events": "^3.3.0",
-    "json-bigint": "^1.0.0",
-    "ws": "^8.18.0"
-  },
+  "types": "dist/index.d.ts",
   "scripts": {
     "build": "tsc",
     "test": "jest"
   },
+  "dependencies": {
+    "json-bigint": "^1.0.0",
+    "p-limit": "^3.0.0",
+    "ws": "^8.0.0"
+  },
   "devDependencies": {
-    "@types/events": "^3.0.3",
-    "@types/json-bigint": "^1.0.4",
-    "@types/ws": "^8.5.13",
-    "ts-node": "^10.9.2",
-    "typescript": "^5.7.2"
-  }
+    "@types/jest": "^29.0.0",
+    "@types/json-bigint": "^1.0.0",
+    "@types/node": "^18.0.0",
+    "@types/ws": "^8.0.0",
+    "dotenv": "^16.4.7",
+    "jest": "^29.0.0",
+    "openai": "^4.0.0",
+    "ts-node": "^10.9.0",
+    "typescript": "^5.0.0"
+  },
+  "keywords": [
+    "unifai",
+    "sdk",
+    "ai",
+    "tools",
+    "toolkit"
+  ],
+  "author": "UnifAI",
+  "license": "MIT"
 }

@@ -1,140 +1,124 @@
-**AGIverse is in early development stage, the world will be reset multiple times in the future until the product is publicly released.**
+# unifai-sdk-js
 
-## agiverse-js
-
-agiverse-js is the TypeScript SDK for AGIverse, an autonomous, AI native infrastructure for AI agents to communicate, collaborate, and use dynamic tools.
+unifai-sdk-js is the JavaScript/TypeScript SDK for Unifai, an AI native platform for dynamic tools and agent to agent communication.
 
 ## Installation
 
-Install the package via npm:
-
 ```bash
-npm install agiverse
+npm install unifai-sdk
 ```
 
-## Getting your AGIverse API key
+## Getting your Unifai API key
 
-You can get your API key for free from [AGIverse](https://app.agiverse.io/).
+You can get your API key for free from [Unifai](https://app.unifai.network/).
 
-## Smart Building (a.k.a. Smart Space)
+There are two types of API keys:
 
-A Smart Building is a programmable building in AGIverse. It can define and handle custom actions with any JSON-serializable input and output data format, providing endless possibilities for the functionality of the building.
+- Agent API key: for using toolkits in your own agents.
+- Toolkit API key: for creating toolkits that can be used by other agents.
 
-Initialize a smart building client:
+## Using tools
+
+To use tools in your agents, you need an **agent** API key. You can get an agent API key for free at [Unifai](https://app.unifai.network/).
 
 ```typescript
-import { SmartBuilding } from 'agiverse-js';
+import { Tools } from 'unifai-sdk';
 
-const building = new SmartBuilding({
-  apiKey: 'YOUR_API_KEY',
-  buildingId: 'YOUR_BUILDING_ID',
+const tools = new Tools({ apiKey: 'xxx' });
+```
+
+Then you can pass the tools to any OpenAI compatible API. Popular options include:
+
+- OpenAI's native API: For using OpenAI models directly
+- [OpenRouter](https://openrouter.ai/docs): A service that gives you access to most LLMs through a single OpenAI compatible API
+
+The tools will work with any API that follows the OpenAI function calling format. This gives you the flexibility to choose the best LLM for your needs while keeping your tools working consistently.
+
+```typescript
+const response = await openai.chat.completions.create({
+  model: "gpt-4o",
+  messages: [{ content: "Can you tell me what is trending on Google today?", role: "user" }],
+  tools: tools.getTools(),
 });
 ```
 
-Register event handlers:
+If the response contains tool calls, you can pass them to the tools.callTools method to get the results. The output will be a list of messages containing the results of the tool calls that can be concatenated to the original messages and passed to the LLM again.
 
 ```typescript
-// When the building is ready
-building.on('ready', () => {
-  console.log(`Smart building ${building.buildingId} is ready to use`);
-});
+const results = await tools.callTools(response.choices[0].message.tool_calls);
+messages.push(...results);
+// messages can be passed to the LLM again now
 ```
 
-Update the building name and/or description:
+Passing the tool calls results back to the LLM might get you more function calls, and you can keep calling the tools until you get a response that doesn't contain any tool calls. For example:
 
 ```typescript
-await building.updateBuilding('Echo Slam', `What's in, what's out.`);
+const messages = [{ content: "Can you tell me what is trending on Google today?", role: "user" }];
+while (true) {
+  const response = await openai.chat.completions.create({
+    model: "gpt-4o",
+    messages,
+    tools: tools.getTools(),
+  });
+  messages.push(response.choices[0].message);
+  const results = await tools.callTools(response.choices[0].message.tool_calls);
+  if (results.length === 0) break;
+  messages.push(...results);
+}
+```
+
+## Creating tools
+
+Anyone can create dynamic tools in Unifai by creating a toolkit.
+
+A toolkit is a collection of tools that are connected to the Unifai infrastructure, and can be searched and used by agents dynamically.
+
+Initialize a toolkit client with your **toolkit** API key. You can get a toolkit API key for free at [Unifai](https://app.unifai.network/).
+
+```typescript
+import { Toolkit } from 'unifai-sdk';
+
+const toolkit = new Toolkit({ apiKey: 'xxx' });
+```
+
+Update the toolkit name and/or description if you need:
+
+```typescript
+await toolkit.updateToolkit({ 
+  name: "Echo Slam", 
+  description: "What's in, what's out." 
+});
 ```
 
 Register action handlers:
 
 ```typescript
-// Register an 'echo' action
-building.action(
+toolkit.action(
   {
-    action: 'echo',
-    actionDescription: 'Echo the message back to the player',
-    payloadDescription: '{"content": string}',
+    action: "echo",
+    actionDescription: "Echo the message",
+    payloadDescription: {
+      content: { type: "string" }
+    }
   },
   async (ctx, payload) => {
-    if (payload && payload.content) {
-      const message = `You are ${ctx.playerName} <${ctx.playerId}>. You said "${payload.content}". There are ${ctx.building.players.length} players in the building now.`;
-      await ctx.sendResult(message);
-    } else {
-      await ctx.sendResult({ error: "You didn't say anything!" });
-    }
+    return ctx.result(`You are agent <${ctx.agentId}>, you said "${payload?.content}".`);
   }
 );
 ```
 
-Note that `payloadDescription` should contain enough information for agents to understand the payload format. It doesn't have to be in certain format, as long as agents can understand it as nautural language and generate correct payload. Think of it as the comments and docs for your API, agents read it and decide what parameters to use. For example, it could be a dictionary of the parameters and their descriptions:
+Note that `payloadDescription` can be any string or a dict that contains enough information for agents to understand the payload format. It doesn't have to be in certain format, as long as agents can understand it as natural language and generate correct payload. Think of it as the comments and docs for your API, agents read it and decide what parameters to use.
+
+Start the toolkit:
 
 ```typescript
-payloadDescription: {
-  content: {
-    type: 'string',
-    description: 'The content of the message',
-  },
-}
-```
-
-or a string that describes the payload format in natural language:
-
-```typescript
-payloadDescription: '{"content": string that is at least 20 characters long, "location": [x, y]} (requirement: x and y must be integers, and x > 0, y > 0)'
-```
-
-Start the smart building:
-
-```typescript
-building.run();
-```
-
-### Smart action with payment
-
-Action can also have payment associated with it. The payment can be in both ways, which means the player will be charged or get paid when the action is executed.
-
-When you want to charge the player:
-
-1. Set the payment description to a positive number or anything that contains enough information to let the agent know how much they should authorize.
-2. Then agents will call the action with a `payment` parameter, which is the **maximum** amount they are willing to pay for this action.
-3. Then you can pass the amount you will charge for this action to `send_result` through `payment` parameter. Note that a negative `payment` means the player is getting paid from you, so please make sure the amount is positive.
-
-```typescript
-// Register a 'purchase' action with payment
-building.action(
-  {
-    action: 'purchase',
-    payloadDescription: '{"content": string}',
-    paymentDescription: '1',
-  },
-  async (ctx, payload, payment) => {
-    // Do something
-    if (payment >= 1) {
-      await ctx.sendResult('You are charged $1 for this action!', 1);
-    } else {
-      await ctx.sendResult('Insufficient payment!', 0);
-    }
-  }
-);
-```
-
-When you want to pay the player, just set the `payment` to a negative number when calling `send_result`.
-
-```typescript
-// Register a 'withdraw' action
-building.action(
-  {
-    action: 'withdraw',
-    payloadDescription: '{"content": string}',
-  },
-  async (ctx, payload) => {
-    // Do something
-    await ctx.sendResult('You are getting paid $1 for this action!', -1);
-  }
-);
+await toolkit.run();
 ```
 
 ## Examples
 
 You can find examples in the `examples` directory.
+
+## Contributing
+
+Contributions are welcome! Please feel free to submit a Pull Request. For major changes, please open an issue first to discuss what you would like to change.
