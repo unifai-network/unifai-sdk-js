@@ -42,7 +42,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
   const { name, arguments: args } = request.params;
   const result = await tools.callTool(name, args);
   return {
-    content: [{ type: "text", text: `${result}` }],
+    content: [{ type: "text", text: JSON.stringify(result) }],
   };
 });
 
