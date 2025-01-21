@@ -81,6 +81,7 @@ Then in your Claude Desktop config:
     "unifai-tools": {
       "command": "npx",
       "args": [
+        "-y",
         "-p",
         "unifai-sdk",
         "unifai-tools-mcp"
