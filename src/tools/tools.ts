@@ -1,5 +1,5 @@
 import pLimit from 'p-limit';
-import { BACKEND_API_ENDPOINT } from '../common/const';
+import { BACKEND_API_ENDPOINT } from '../common';
 import { ToolsAPI } from './api';
 
 interface Function {

@@ -1,4 +1,4 @@
-import { API } from '../common/api';
+import { API } from '../common';
 
 export class ToolsAPI extends API {
   public async searchTools(args: Record<string, string>): Promise<any> {

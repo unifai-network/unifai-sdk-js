@@ -1,7 +1,7 @@
 import WebSocket from 'ws';
 import JSONbig from 'json-bigint';
 import { EventEmitter } from 'events';
-import { BACKEND_WS_ENDPOINT, FRONTEND_API_ENDPOINT } from '../common/const';
+import { BACKEND_WS_ENDPOINT, FRONTEND_API_ENDPOINT } from '../common';
 import { ActionContext, ActionResult } from './context';
 import { ToolkitAPI } from './api';
 import { ActionDescription, ServerToToolkitMessage, ServerToToolkitMessageType, ActionMessageData, ToolkitToServerMessage, ToolkitToServerMessageType, RegisterActionsMessageData } from './messages';

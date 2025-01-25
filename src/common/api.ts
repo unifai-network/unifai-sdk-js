@@ -16,7 +16,7 @@ export class API {
     this.apiUri = endpoint;
   }
 
-  protected async request(
+  public async request(
     method: string,
     path: string,
     options: {
