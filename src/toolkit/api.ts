@@ -1,4 +1,4 @@
-import { API } from '../common/api';
+import { API } from '../common';
 
 export class ToolkitAPI extends API {
   public async updateToolkit(info: Record<string, any>): Promise<void> {
