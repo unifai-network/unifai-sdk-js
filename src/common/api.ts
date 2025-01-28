@@ -1,5 +1,5 @@
 export interface APIConfig {
-  apiKey: string;
+  apiKey?: string;
   endpoint?: string;
 }
 
@@ -8,7 +8,7 @@ export class API {
   protected apiUri: string;
 
   constructor(config: APIConfig) {
-    this.apiKey = config.apiKey;
+    this.apiKey = config.apiKey || '';
     this.apiUri = config.endpoint || '';
   }
 
@@ -29,7 +29,7 @@ export class API {
   ): Promise<any> {
     const { timeout = 10000, headers = {}, params, json, ...rest } = options;
 
-    if (!headers['Authorization']) {
+    if (!headers['Authorization'] && this.apiKey) {
       headers['Authorization'] = this.apiKey;
     }
 
@@ -55,7 +55,8 @@ export class API {
       });
 
       if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
+        const errorBody = await response.text();
+        throw new Error(`HTTP error! status: ${response.status}, body: ${errorBody}`);
       }
 
       return await response.json();
