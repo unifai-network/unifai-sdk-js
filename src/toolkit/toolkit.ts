@@ -1,7 +1,7 @@
 import WebSocket from 'ws';
 import JSONbig from 'json-bigint';
 import { EventEmitter } from 'events';
-import { BACKEND_WS_ENDPOINT, FRONTEND_API_ENDPOINT } from '../common';
+import { BACKEND_WS_ENDPOINT } from '../common';
 import { ActionContext, ActionResult } from './context';
 import { ToolkitAPI } from './api';
 import { ActionDescription, ServerToToolkitMessage, ServerToToolkitMessageType, ActionMessageData, ToolkitToServerMessage, ToolkitToServerMessageType, RegisterActionsMessageData } from './messages';
@@ -34,7 +34,6 @@ export class Toolkit extends EventEmitter {
     this.actionHandlers = {};
     this.wsEndpoint = BACKEND_WS_ENDPOINT;
     this.api = new ToolkitAPI({ apiKey });
-    this.setApiEndpoint(FRONTEND_API_ENDPOINT);
     this.setWsEndpoint(BACKEND_WS_ENDPOINT);
   }
 
