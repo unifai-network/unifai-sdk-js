@@ -1,5 +1,4 @@
 import pLimit from 'p-limit';
-import { BACKEND_API_ENDPOINT } from '../common';
 import { ToolsAPI } from './api';
 
 interface Function {
@@ -70,7 +69,7 @@ export const functionList: Function[] = [
         },
         payment: {
           type: 'number',
-          description: 'Amount to authorize in USD. Positive number means you will be charged no more than this amount, negative number means you are requesting to get paid for at least this amount.',
+          description: 'Amount to authorize in USD. Positive number means you will be charged no more than this amount, negative number means you are requesting to get paid for at least this amount. Only include this field if the action you are calling includes payment information.',
         }
       },
       required: ['action', 'payload'],
@@ -92,7 +91,6 @@ export class Tools {
 
   constructor({ apiKey }: ToolsConfig) {
     this.api = new ToolsAPI({ apiKey });
-    this.setApiEndpoint(BACKEND_API_ENDPOINT);
   }
 
   /**

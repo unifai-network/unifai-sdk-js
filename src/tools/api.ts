@@ -1,6 +1,13 @@
-import { API } from '../common';
+import { API, APIConfig, BACKEND_API_ENDPOINT } from '../common';
 
 export class ToolsAPI extends API {
+  constructor(config: APIConfig) {
+    if (!config.endpoint) {
+      config.endpoint = BACKEND_API_ENDPOINT;
+    }
+    super(config);
+  }
+
   public async searchTools(args: Record<string, string>): Promise<any> {
     return await this.request('GET', '/actions/search', { params: args });
   }
