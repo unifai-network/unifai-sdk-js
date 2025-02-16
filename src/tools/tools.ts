@@ -37,7 +37,7 @@ enum FunctionName {
 export const functionList: Function[] = [
   {
     name: FunctionName.SEARCH_TOOLS,
-    description: 'Search for tools. The tools cover a wide range of domains include data source, API, SDK, etc. Try searching whenever you need to use a tool.',
+    description: 'Search for tools. The tools cover a wide range of domains include data source, API, SDK, etc. Try searching whenever you need to use a tool. Returned actions should ONLY be used in call_tool.',
     parameters: {
       type: 'object',
       properties: {

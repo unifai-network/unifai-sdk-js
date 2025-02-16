@@ -35,9 +35,10 @@ Then you can pass the tools to any OpenAI compatible API. Popular options includ
 The tools will work with any API that follows the OpenAI function calling format. This gives you the flexibility to choose the best LLM for your needs while keeping your tools working consistently.
 
 ```typescript
+const messages = [{ content: "Can you tell me what is trending on Google today?", role: "user" }];
 const response = await openai.chat.completions.create({
   model: "gpt-4o",
-  messages: [{ content: "Can you tell me what is trending on Google today?", role: "user" }],
+  messages,
   tools: tools.getTools(),
 });
 ```
