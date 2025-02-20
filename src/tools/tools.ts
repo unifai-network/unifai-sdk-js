@@ -30,14 +30,14 @@ interface OpenAIToolResult {
 }
 
 enum FunctionName {
-  SEARCH_TOOLS = 'search_tools',
-  CALL_TOOL = 'call_tool',
+  SEARCH_TOOLS = 'search_services',
+  CALL_TOOL = 'invoke_service',
 }
 
 export const functionList: Function[] = [
   {
     name: FunctionName.SEARCH_TOOLS,
-    description: 'Search for tools. The tools cover a wide range of domains include data source, API, SDK, etc. Try searching whenever you need to use a tool. Returned actions should ONLY be used in call_tool.',
+    description: `Search for tools. The tools cover a wide range of domains include data source, API, SDK, etc. Try searching whenever you need to use a tool. Returned actions should ONLY be used in ${FunctionName.CALL_TOOL}.`,
     parameters: {
       type: 'object',
       properties: {
@@ -55,17 +55,17 @@ export const functionList: Function[] = [
   },
   {
     name: FunctionName.CALL_TOOL,
-    description: 'Call a tool returned by search_tools',
+    description: `Call a tool returned by ${FunctionName.SEARCH_TOOLS}`,
     parameters: {
       type: 'object',
       properties: {
         action: {
           type: 'string',
-          description: 'The exact action you want to call in the search_tools result.'
+          description: `The exact action you want to call in the ${FunctionName.SEARCH_TOOLS} result.`
         },
         payload: {
           type: 'string',
-          description: 'Action payload, based on the payload schema in the search_tools result. You can pass either the json object directly or json encoded string of the object.',
+          description: `Action payload, based on the payload schema in the ${FunctionName.SEARCH_TOOLS} result. You can pass either the json object directly or json encoded string of the object.`,
         },
         payment: {
           type: 'number',
@@ -115,8 +115,7 @@ export class Tools {
     } else if (toolName === FunctionName.CALL_TOOL) {
       return await this.api.callTool(params);
     } else {
-      console.warn(`Unknown tool name: ${toolName}`);
-      return null;
+      throw new Error(`Unknown tool name: ${toolName}`);
     }
   }
 
