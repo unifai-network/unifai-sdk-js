@@ -1,6 +1,6 @@
 # unifai-sdk-js
 
-unifai-sdk-js is the JavaScript/TypeScript SDK for Unifai, an AI native platform for dynamic tools and agent to agent communication.
+unifai-sdk-js is the JavaScript/TypeScript SDK for UnifAI, an AI native platform for dynamic tools and agent to agent communication.
 
 ## Installation
 
@@ -8,9 +8,9 @@ unifai-sdk-js is the JavaScript/TypeScript SDK for Unifai, an AI native platform
 npm install unifai-sdk
 ```
 
-## Getting your Unifai API key
+## Getting your UnifAI API key
 
-You can get your API key for free from [Unifai](https://app.unifai.network/).
+You can get your API key for free from [UnifAI](https://app.unifai.network/).
 
 There are two types of API keys:
 
@@ -19,7 +19,7 @@ There are two types of API keys:
 
 ## Using tools
 
-To use tools in your agents, you need an **agent** API key. You can get an agent API key for free at [Unifai](https://app.unifai.network/).
+To use tools in your agents, you need an **agent** API key. You can get an agent API key for free at [UnifAI](https://app.unifai.network/).
 
 ```typescript
 import { Tools } from 'unifai-sdk';
@@ -27,9 +27,62 @@ import { Tools } from 'unifai-sdk';
 const tools = new Tools({ apiKey: 'xxx' });
 ```
 
-Then you can pass the tools to any OpenAI compatible API. Popular options include:
+### Tool Types
 
-- OpenAI's native API: For using OpenAI models directly
+UnifAI provides a flexible system for integrating AI tools in your applications:
+
+#### Dynamic Tools
+
+Dynamic tools are enabled by default, allowing agents to discover and use tools on-the-fly based on the task at hand. Tools will not be visible to agents directly. Instead, agents will see two functions only: one to search tools, one to use tools. Agents will be able to search for tools based on semantic query, get a list of relevant tools, and use tools dynamically.
+
+```typescript
+// Enable dynamic tools (default behavior)
+const dynamicTools = await tools.getTools({ dynamicTools: true });
+```
+
+#### Static Toolkits
+
+Static toolkits allow you to specify entire toolkits to be exposed to agents so they can be used without search.
+
+```typescript
+const staticTools = await tools.getTools({
+  dynamicTools: false,  // Optional: disable dynamic tools
+  staticToolkits: ["1", "2"]
+});
+```
+
+You can find available toolkits at https://app.unifai.network/toolkits.
+
+#### Static Actions
+
+Static actions provide granular control, allowing you to specify individual actions (tools) to be exposed to agents.
+
+```typescript
+const staticTools = await tools.getTools({
+  dynamicTools: false,  // Optional: disable dynamic tools
+  staticActions: ["action_id_1", "action_id_2"]
+});
+```
+
+You can find available actions at https://app.unifai.network/actions.
+
+#### Mixed Tools
+
+You can combine these approaches for a customized tool setup:
+
+```typescript
+const combinedTools = await tools.getTools({
+  dynamicTools: true,
+  staticToolkits: ["essential_toolkit_id"],
+  staticActions: ["critical_action_id"]
+});
+```
+
+### Passing Tools to LLMs
+
+You can pass the tools to any OpenAI compatible API. Popular options include:
+
+- Model providers' native API
 - [OpenRouter](https://openrouter.ai/docs): A service that gives you access to most LLMs through a single OpenAI compatible API
 
 The tools will work with any API that follows the OpenAI function calling format. This gives you the flexibility to choose the best LLM for your needs while keeping your tools working consistently.
@@ -39,7 +92,7 @@ const messages = [{ content: "Can you tell me what is trending on Google today?"
 const response = await openai.chat.completions.create({
   model: "gpt-4o",
   messages,
-  tools: tools.getTools(),
+  tools: await tools.getTools(),
 });
 ```
 
@@ -59,7 +112,7 @@ while (true) {
   const response = await openai.chat.completions.create({
     model: "gpt-4o",
     messages,
-    tools: tools.getTools(),
+    tools: await tools.getTools(),
   });
   messages.push(response.choices[0].message);
   const results = await tools.callTools(response.choices[0].message.tool_calls);
@@ -72,14 +125,12 @@ while (true) {
 
 We provide a MCP server to access tools in any [MCP clients](https://modelcontextprotocol.io/clients) such as [Claude Desktop](https://modelcontextprotocol.io/quickstart/user).
 
-The easiest way to run the server is using `uv`, see [Instaling uv](https://docs.astral.sh/uv/getting-started/installation/) if you haven't installed it yet.
-
-Then in your Claude Desktop config:
+Make sure you have npm installed. Then in your MCP client config:
 
 ```json
 {
   "mcpServers": {
-    "unifai-tools": {
+    "unifai": {
       "command": "npx",
       "args": [
         "-y",
@@ -95,15 +146,39 @@ Then in your Claude Desktop config:
 }
 ```
 
-Now your Claude Desktop will be able to access all the tools in Unifai automatically.
+Now your MCP client will be able to access all the tools in UnifAI automatically through dynamic tools.
+
+You can use environment variable to choose dynamic/static tools exposed by the MCP server, for example:
+
+```json
+{
+  "mcpServers": {
+    "unifai": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "-p",
+        "unifai-sdk",
+        "unifai-tools-mcp"
+      ],
+      "env": {
+        "UNIFAI_AGENT_API_KEY": "",
+        "DYNAMIC_TOOLS": "true",
+        "STATIC_TOOLKITS": "1,2,3",
+        "STATIC_ACTIONS": "ACTION_A,ACTION_B"
+      }
+    }
+  }
+}
+```
 
 ## Creating tools
 
-Anyone can create dynamic tools in Unifai by creating a toolkit.
+Anyone can create dynamic tools in UnifAI by creating a toolkit.
 
-A toolkit is a collection of tools that are connected to the Unifai infrastructure, and can be searched and used by agents dynamically.
+A toolkit is a collection of tools that are connected to the UnifAI infrastructure, and can be searched and used by agents dynamically.
 
-Initialize a toolkit client with your **toolkit** API key. You can get a toolkit API key for free at [Unifai](https://app.unifai.network/).
+Initialize a toolkit client with your **toolkit** API key. You can get a toolkit API key for free at [UnifAI](https://app.unifai.network/).
 
 ```typescript
 import { Toolkit } from 'unifai-sdk';
@@ -115,7 +190,7 @@ Update the toolkit name and/or description if you need:
 
 ```typescript
 await toolkit.updateToolkit({ 
-  name: "Echo Slam", 
+  name: "EchoChamber", 
   description: "What's in, what's out." 
 });
 ```
@@ -137,7 +212,7 @@ toolkit.action(
 );
 ```
 
-Note that `payloadDescription` can be any string or a dict that contains enough information for agents to understand the payload format. It doesn't have to be in certain format, as long as agents can understand it as natural language and generate correct payload. Think of it as the comments and docs for your API, agents read it and decide what parameters to use.
+Note that `payloadDescription` can be any string or a dict that contains enough information for agents to understand the payload format. It doesn't have to be in a certain format, as long as agents can understand it as natural language and generate the correct payload. Think of it as the comments and docs for your API, agents read it and decide what parameters to use. In practice we recommend using JSON schema to match the format of training data.
 
 Start the toolkit:
 

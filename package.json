@@ -1,7 +1,7 @@
 {
   "name": "unifai-sdk",
-  "version": "0.2.7",
-  "description": "Unifai-sdk-js is the Javascript/Typescript SDK for Unifai, an AI native platform for dynamic tools and agent to agent communication.",
+  "version": "0.3.0",
+  "description": "unifai-sdk-js is the Javascript/Typescript SDK for UnifAI, an AI native platform for dynamic tools and agent to agent communication.",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "bin": {

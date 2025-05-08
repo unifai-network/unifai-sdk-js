@@ -3,6 +3,18 @@ export interface APIConfig {
   endpoint?: string;
 }
 
+export class APIError extends Error {
+  status: number;
+  responseData: any;
+
+  constructor(status: number, responseData: any) {
+    super(`API error ${status}: ${JSON.stringify(responseData)}`);
+    this.name = 'APIError';
+    this.status = status;
+    this.responseData = responseData;
+  }
+}
+
 export class API {
   protected apiKey: string;
   protected apiUri: string;
@@ -54,12 +66,18 @@ export class API {
         ...rest,
       });
 
-      if (!response.ok) {
-        const errorBody = await response.text();
-        throw new Error(`HTTP error! status: ${response.status}, body: ${errorBody}`);
+      if (response.ok) {
+        return await response.json();
+      } else {
+        let errorData;
+        try {
+          errorData = await response.json();
+        } catch {
+          errorData = { detail: await response.text() };
+        }
+        
+        throw new APIError(response.status, errorData);
       }
-
-      return await response.json();
     } finally {
       clearTimeout(timeoutId);
     }
