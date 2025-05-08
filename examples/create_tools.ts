@@ -1,9 +1,12 @@
+import { config } from 'dotenv';
 import { Toolkit, ActionContext } from '../dist';
 
-async function main() {
-  const toolkit = new Toolkit({ apiKey: 'YOUR_TOOLKIT_API_KEY' });
+config({ path: 'examples/.env' });
 
-  await toolkit.updateToolkit({ name: 'Echo Slam', description: "What's in, what's out." });
+async function main() {
+  const toolkit = new Toolkit({ apiKey: process.env.UNIFAI_TOOLKIT_API_KEY || '' });
+
+  await toolkit.updateToolkit({ name: 'EchoChamber', description: "What's in, what's out." });
 
   toolkit.event('ready', () => {
     console.log('Toolkit is ready to use');

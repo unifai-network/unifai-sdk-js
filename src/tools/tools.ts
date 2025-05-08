@@ -89,6 +89,12 @@ interface ToolsConfig {
 export class Tools {
   private api: ToolsAPI;
 
+  /**
+   * A class to interact with the UnifAI Tools API.
+   * 
+   * @param config - The configuration object
+   * @param config.apiKey - The API key of your agent
+   */
   constructor({ apiKey }: ToolsConfig) {
     this.api = new ToolsAPI({ apiKey });
   }
@@ -102,10 +108,135 @@ export class Tools {
     this.api.setEndpoint(endpoint);
   }
 
-  public getTools(): Tool[] {
-    return toolList;
+  /**
+   * Fetch static tools from the API based on provided toolkit IDs and action IDs
+   * 
+   * @param staticToolkits - List of toolkit IDs to include
+   * @param staticActions - List of action IDs to include
+   * @returns List of Tool objects
+   */
+  private async fetchStaticTools(
+    staticToolkits: string[] | null = null,
+    staticActions: string[] | null = null,
+  ): Promise<Tool[]> {
+    const staticTools: Tool[] = [];
+
+    try {
+      if (staticToolkits?.length || staticActions?.length) {
+        const args: Record<string, any> = { limit: 100 };
+        
+        if (staticToolkits?.length) {
+          args.includeToolkits = staticToolkits;
+        }
+        
+        if (staticActions?.length) {
+          args.includeActions = staticActions;
+        }
+        
+        const actions = await this.api.searchTools(args);
+
+        for (const action of actions) {
+          const actionName = action.action || '';
+          const actionDesc = action.description || '';
+          const payloadSchema = action.payload || {};
+          const paymentInfo = action.payment || null;
+
+          if (!actionName) {
+            console.warn(`Action name is empty for action:`, action);
+            continue;
+          }
+
+          const parameters: any = {
+            type: 'object',
+            properties: {
+              payload: {
+                type: 'object',
+                description: `payload is an object with the following properties: ${typeof payloadSchema === 'object' ? JSON.stringify(payloadSchema) : payloadSchema}`,
+                properties: {},
+              },
+            },
+            required: ['payload'],
+          };
+
+          if (paymentInfo) {
+            parameters.properties.payment = {
+              type: 'number',
+              description: 
+                "Amount to authorize in USD. " +
+                "Positive number means you will be charged no more than this amount, " +
+                "negative number means you are requesting to get paid for at least this amount. " +
+                `Determine the payment amount based on the following payment information: ${JSON.stringify(paymentInfo)}`
+            };
+          }
+
+          staticTools.push({
+            type: 'function',
+            function: {
+              name: actionName,
+              description: actionDesc,
+              parameters
+            }
+          });
+        }
+      }
+      
+      return staticTools;
+    } catch (error) {
+      console.warn(`Failed to fetch static resources via searchTools:`, error);
+      return [];
+    }
   }
 
+  /**
+   * Get the list of tools in OpenAI API compatible format.
+   * 
+   * @param options - Options for getting tools
+   * @param options.dynamicTools - Whether to include dynamic tools (default: true)
+   * @param options.staticToolkits - List of static toolkit IDs to include
+   * @param options.staticActions - List of static action IDs to include 
+   * @param options.cacheControl - Whether to include cache control
+   * @returns List of tools in OpenAI API compatible format
+   */
+  public async getTools(
+    options: {
+      dynamicTools?: boolean;
+      staticToolkits?: string[] | null;
+      staticActions?: string[] | null;
+      cacheControl?: boolean;
+    } = {}
+  ): Promise<any[]> {
+    const { 
+      dynamicTools = true, 
+      staticToolkits = null, 
+      staticActions = null,
+      cacheControl = false,
+    } = options;
+
+    const tools: any[] = [];
+
+    if (dynamicTools) {
+      tools.push(...toolList);
+    }
+
+    if (staticToolkits?.length || staticActions?.length) {
+      const staticTools = await this.fetchStaticTools(staticToolkits, staticActions);
+      tools.push(...staticTools);
+    }
+    
+    if (cacheControl && tools.length > 0) {
+      tools[tools.length - 1].cache_control = { type: 'ephemeral' };
+    }
+    
+    return tools;
+  }
+
+  /**
+   * Call a tool by name with arguments
+   * 
+   * @param name - The tool name or FunctionName enum
+   * @param args - The arguments for the tool
+   * @returns The result of the tool call
+   */
   public async callTool(name: string | FunctionName, args: any): Promise<any> {
     const toolName = typeof name === 'string' ? name : FunctionName[name];
     const params = typeof args === 'string' ? JSON.parse(args) : args;
@@ -115,10 +246,24 @@ export class Tools {
     } else if (toolName === FunctionName.CALL_TOOL) {
       return await this.api.callTool(params);
     } else {
-      throw new Error(`Unknown tool name: ${toolName}`);
+      try {
+        return await this.api.callTool({
+          action: toolName,
+          ...params,
+        });
+      } catch (error) {
+        throw new Error(`Failed to call tool ${toolName}: ${error}`);
+      }
     }
   }
 
+  /**
+   * Call multiple tools concurrently
+   * 
+   * @param toolCalls - The list of tool calls from the LLM response
+   * @param concurrency - The maximum number of concurrent tool calls (default: 1)
+   * @returns List of tool results in OpenAI API compatible format
+   */
   public async callTools(toolCalls: OpenAIToolCall[] | null = null, concurrency: number = 1): Promise<OpenAIToolResult[]> {
     if (!toolCalls) return [];
 

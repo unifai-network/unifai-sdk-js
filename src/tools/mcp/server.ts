@@ -10,10 +10,15 @@ import {
 } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
 
-import { functionList, Tools } from "../tools";
+import { Tools } from "../tools";
 
 const ToolInputSchema = ToolSchema.shape.inputSchema;
 type ToolInput = z.infer<typeof ToolInputSchema>;
+
+const API_KEY = process.env.UNIFAI_AGENT_API_KEY || "";
+const DYNAMIC_TOOLS = process.env.DYNAMIC_TOOLS !== "false"; // Default to true
+const STATIC_TOOLKITS = process.env.STATIC_TOOLKITS ? process.env.STATIC_TOOLKITS.split(",").map(id => id.trim()) : null;
+const STATIC_ACTIONS = process.env.STATIC_ACTIONS ? process.env.STATIC_ACTIONS.split(",").map(id => id.trim()) : null;
 
 const server = new Server(
   {
@@ -27,15 +32,22 @@ const server = new Server(
   },
 );
 
-const tools = new Tools({ apiKey: process.env.UNIFAI_AGENT_API_KEY || "" });
+const tools = new Tools({ apiKey: API_KEY });
 
 server.setRequestHandler(ListToolsRequestSchema, async () => {
-  const tools: Tool[] = functionList.map((fn) => ({
-    name: fn.name,
-    description: fn.description,
-    inputSchema: fn.parameters as ToolInput,
+  let toolList = await tools.getTools({
+    dynamicTools: DYNAMIC_TOOLS,
+    staticToolkits: STATIC_TOOLKITS,
+    staticActions: STATIC_ACTIONS,
+  });
+  
+  toolList = toolList.map((tool: any) => ({
+    name: tool.function.name,
+    description: tool.function.description,
+    inputSchema: tool.function.parameters as ToolInput,
   }));
-  return { tools };
+  
+  return { tools: toolList };
 });
 
 server.setRequestHandler(CallToolRequestSchema, async (request) => {
