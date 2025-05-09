@@ -16,9 +16,9 @@ const ToolInputSchema = ToolSchema.shape.inputSchema;
 type ToolInput = z.infer<typeof ToolInputSchema>;
 
 const API_KEY = process.env.UNIFAI_AGENT_API_KEY || "";
-const DYNAMIC_TOOLS = process.env.DYNAMIC_TOOLS !== "false"; // Default to true
-const STATIC_TOOLKITS = process.env.STATIC_TOOLKITS ? process.env.STATIC_TOOLKITS.split(",").map(id => id.trim()) : null;
-const STATIC_ACTIONS = process.env.STATIC_ACTIONS ? process.env.STATIC_ACTIONS.split(",").map(id => id.trim()) : null;
+const DYNAMIC_TOOLS = process.env.UNIFAI_DYNAMIC_TOOLS !== "false"; // Default to true
+const STATIC_TOOLKITS = process.env.UNIFAI_STATIC_TOOLKITS ? process.env.UNIFAI_STATIC_TOOLKITS.split(",").map(id => id.trim()) : null;
+const STATIC_ACTIONS = process.env.UNIFAI_STATIC_ACTIONS ? process.env.UNIFAI_STATIC_ACTIONS.split(",").map(id => id.trim()) : null;
 
 const server = new Server(
   {
