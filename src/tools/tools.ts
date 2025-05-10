@@ -150,9 +150,8 @@ export class Tools {
             type: 'object',
             properties: {
               payload: {
-                type: 'object',
-                description: `payload is an object with the following properties: ${typeof payloadSchema === 'object' ? JSON.stringify(payloadSchema) : payloadSchema}`,
-                properties: {},
+                type: 'string',
+                description: `payload is an object or json encoded string of the object with the following properties: ${typeof payloadSchema === 'object' ? JSON.stringify(payloadSchema) : payloadSchema}`,
               },
             },
             required: ['payload'],
