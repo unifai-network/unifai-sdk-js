@@ -1,3 +1,5 @@
+[![MseeP.ai Security Assessment Badge](https://mseep.net/pr/unifai-network-unifai-sdk-js-badge.png)](https://mseep.ai/app/unifai-network-unifai-sdk-js)
+
 # unifai-sdk-js
 
 unifai-sdk-js is the JavaScript/TypeScript SDK for UnifAI, an AI native platform for dynamic tools and agent to agent communication.
