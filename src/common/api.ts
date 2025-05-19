@@ -51,7 +51,14 @@ export class API {
     // Construct the URL with query parameters
     const url = new URL(`${this.apiUri}${path}`);
     if (params) {
-      Object.keys(params).forEach(key => url.searchParams.append(key, params[key]));
+      Object.keys(params).forEach(key => {
+        if (Array.isArray(params[key])) {
+          // Handle arrays by appending each value with the same key
+          params[key].forEach((value: any) => url.searchParams.append(key, value));
+        } else {
+          url.searchParams.append(key, params[key]);
+        }
+      });
     }
 
     try {
