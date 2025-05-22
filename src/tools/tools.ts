@@ -65,7 +65,7 @@ export const functionList: Function[] = [
         },
         payload: {
           type: 'string',
-          description: `Action payload, based on the payload schema in the ${FunctionName.SEARCH_TOOLS} result. You can pass either the json object directly or json encoded string of the object.`,
+          description: `Action payload, a json encoded string of the object based on the payload schema in the ${FunctionName.SEARCH_TOOLS} result.`,
         },
         payment: {
           type: 'number',
@@ -151,7 +151,7 @@ export class Tools {
             properties: {
               payload: {
                 type: 'string',
-                description: `payload is an object or json encoded string of the object with the following properties: ${typeof payloadSchema === 'object' ? JSON.stringify(payloadSchema) : payloadSchema}`,
+                description: `payload is a json encoded string of the object with the following properties: ${typeof payloadSchema === 'object' ? JSON.stringify(payloadSchema) : payloadSchema}`,
               },
             },
             required: ['payload'],
