@@ -15,16 +15,20 @@ jobs:
       - name: Set Up Node.js
         uses: actions/setup-node@v3
         with:
-          node-version: '20'
-          registry-url: 'https://registry.npmjs.org/'
+          node-version: "20"
+          registry-url: "https://registry.npmjs.org/"
 
       - name: Install Dependencies
         run: npm install
 
+      - name: Run Unit Tests
+        run: npm test -- --testPathPattern=unit
+
       - name: Build Package
         run: npm run build
+        if: success()
 
       - name: Publish to npm
         run: npm publish
         env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }} 
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
