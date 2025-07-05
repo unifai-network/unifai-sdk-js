@@ -1,9 +1,10 @@
 
 import * as web3 from '@solana/web3.js';
+import { Signer } from './index';
 
 const MAINNET_RPC_URL = 'https://api.mainnet-beta.solana.com';
 
-export async function solSendTransaction(signer: any, tx: any, rpcUrls?: string[]): Promise<{ hash: string | undefined }> {
+export async function solSendTransaction(signer: Signer, tx: any, rpcUrls?: string[]): Promise<{ hash: string | undefined }> {
     const transactionBuffer = new Uint8Array(
         atob(tx.base64)
             .split('')
@@ -17,13 +18,19 @@ export async function solSendTransaction(signer: any, tx: any, rpcUrls?: string[
         transaction = web3.VersionedTransaction.deserialize(transactionBuffer);
     }
 
-    const signedTransaction = await signer.signTransaction(transaction);
+    let signedTransaction: web3.Transaction | web3.VersionedTransaction;
+    if (signer.signTransaction) {
+        signedTransaction = await signer.signTransaction(transaction);
+    } else {
+        throw new Error('Signer should have signTransaction method for Solana.');
+    }
+
     const serializedTransaction = Buffer.from(signedTransaction.serialize());
 
     let lastError: Error | null = null;
 
     if (!rpcUrls || rpcUrls.length === 0) {
-        rpcUrls = [MAINNET_RPC_URL]; // set default RPC URLs if none provided
+        rpcUrls = [ MAINNET_RPC_URL ]; // set default RPC URLs if none provided
     }
 
     let signature;
@@ -40,6 +47,7 @@ export async function solSendTransaction(signer: any, tx: any, rpcUrls?: string[
             break;
 
         } catch (error) {
+            console.error(`Error sending transaction to ${rpcUrl}:`, error);
             lastError = error as Error;
             continue;
         }
