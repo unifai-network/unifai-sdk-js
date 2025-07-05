@@ -35,16 +35,22 @@ export class TransactionAPI extends API {
   }
 
   // Sign and Sends a transaction to blockchains.
-  public async sendTransaction(txId: string, signer: any, rpcUrls?: string[]): Promise<{ hash?: string[] }> {
+  // for solana transaction, please provide your own RPC endpoints.
+  public async sendTransaction(txId: string, signer: tran.Signer, rpcUrls?: string[]): Promise<{ hash?: string[] }> {
 
-    let address: string;
+    let address: string = '';
     if (signer.address) {
       address = signer.address; // ethers signer
     } else if (signer.publicKey) {
       address = signer.publicKey.toBase58(); // solana provider
     } else if (signer.getAddress) {
       address = await signer.getAddress(); // ethers signer with getAddress method
-    } else {
+    } else if (signer.getAddresses) { // wagmi wallet
+      const addresses = await signer.getAddresses(); // ethers signer with getAddresses method
+      if (addresses.length > 0) {
+        address = addresses[0]; // Use the first address
+      } 
+    }else {
       throw new Error('Signer does not have an address or publicKey.');
     }
 
@@ -102,10 +108,10 @@ export class TransactionAPI extends API {
   public async completeTransaction(txId: string, txHash: string, address: string) {
     let completeBody = { txId, txHash, address };
     let data = await this.request('POST', `/tx/complete`, { json: completeBody });
-    if (!data.success) {
-      throw data.error
+    if (data.success || data.message === 'Transaction completed successfully')  {
+      return data;
     }
-    return data
+    throw new Error(data.error || 'Transaction completion failed'); 
   }
 
   public async getTransaction(txId: string) {
