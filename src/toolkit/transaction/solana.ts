@@ -1,10 +1,8 @@
 
 import * as web3 from '@solana/web3.js';
-import { Signer } from './index';
+import { SolanaSigner } from './index';
 
-const MAINNET_RPC_URL = 'https://api.mainnet-beta.solana.com';
-
-export async function solSendTransaction(signer: Signer, tx: any, rpcUrls?: string[]): Promise<{ hash: string | undefined }> {
+export async function solSendTransaction(signer: SolanaSigner, tx: any, rpcUrls?: string[]): Promise<{ hash: string | undefined }> {
     const transactionBuffer = new Uint8Array(
         atob(tx.base64)
             .split('')
@@ -18,7 +16,7 @@ export async function solSendTransaction(signer: Signer, tx: any, rpcUrls?: stri
         transaction = web3.VersionedTransaction.deserialize(transactionBuffer);
     }
 
-    let signedTransaction: web3.Transaction | web3.VersionedTransaction;
+    let signedTransaction: any;
     if (signer.signTransaction) {
         signedTransaction = await signer.signTransaction(transaction);
     } else {
@@ -29,27 +27,39 @@ export async function solSendTransaction(signer: Signer, tx: any, rpcUrls?: stri
 
     let lastError: Error | null = null;
 
-    if (!rpcUrls || rpcUrls.length === 0) {
-        rpcUrls = [ MAINNET_RPC_URL ]; // set default RPC URLs if none provided
-    }
-
-    let signature;
     let connection;
+    let signature;
     const successfulTransactions: { type: string; hash: string }[] = [];
-    for (const rpcUrl of rpcUrls) {
+
+    if (!rpcUrls || rpcUrls.length === 0) {
         try {
-            connection = new web3.Connection(rpcUrl, 'confirmed');
+            connection = new web3.Connection(web3.clusterApiUrl('mainnet-beta'), 'confirmed');
             signature = await connection.sendRawTransaction(serializedTransaction);
             successfulTransactions.push({
                 type: tx.type,
                 hash: signature,
             });
-            break;
 
         } catch (error) {
-            console.error(`Error sending transaction to ${rpcUrl}:`, error);
+            console.error(`Error sending transaction to clusterApiUrl('mainnet-beta'):`, error);
             lastError = error as Error;
-            continue;
+        }
+    } else {
+        for (const rpcUrl of rpcUrls) {
+            try {
+                connection = new web3.Connection(rpcUrl, 'confirmed');
+                signature = await connection.sendRawTransaction(serializedTransaction);
+                successfulTransactions.push({
+                    type: tx.type,
+                    hash: signature,
+                });
+                break;
+
+            } catch (error) {
+                console.error(`Error sending transaction to ${rpcUrl}:`, error);
+                lastError = error as Error;
+                continue;
+            }
         }
     }
 

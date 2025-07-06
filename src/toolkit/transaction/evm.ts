@@ -1,7 +1,7 @@
 import { ethers } from "ethers";
-import { Signer } from "./index";
+import { EtherSigner, WagmiSigner } from "./index";
 
-export async function evmSendTransaction(signer: Signer, tx: any): Promise<{ hash: string | undefined }> {
+export async function evmSendTransaction(signer: EtherSigner|WagmiSigner, tx: any): Promise<{ hash: string | undefined }> {
     try {
         const unsignedTx = ethers.Transaction.from(tx.hex); // Validate the transaction format
 

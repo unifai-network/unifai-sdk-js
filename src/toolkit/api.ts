@@ -36,17 +36,16 @@ export class TransactionAPI extends API {
 
   // Sign and Sends a transaction to blockchains.
   // for solana transaction, please provide your own RPC endpoints.
-  public async sendTransaction(txId: string, signer: tran.Signer, rpcUrls?: string[]): Promise<{ hash?: string[] }> {
+  public async sendTransaction(txId: string, signer: tran.EtherSigner|tran.WagmiSigner|tran.SolanaSigner, rpcUrls?: string[]): Promise<{ hash?: string[] }> {
 
     let address: string = '';
-    if (signer.address) {
-      address = signer.address; // ethers signer
-    } else if (signer.publicKey) {
-      address = signer.publicKey.toBase58(); // solana provider
-    } else if (signer.getAddress) {
-      address = await signer.getAddress(); // ethers signer with getAddress method
-    } else if (signer.getAddresses) { // wagmi wallet
-      const addresses = await signer.getAddresses(); // ethers signer with getAddresses method
+
+    if (tran.isEtherSigner(signer)) {
+      address = (signer as tran.EtherSigner).address; // ethers signer
+    } else if (tran.isSolanaSigner(signer)) {
+      address = (signer as tran.SolanaSigner).publicKey.toBase58(); // solana provider
+    } else if (tran.isWagmiSigner(signer)) { // wagmi wallet
+      const addresses = await (signer as tran.WagmiSigner).getAddresses(); // ethers signer with getAddresses method
       if (addresses.length > 0) {
         address = addresses[0]; // Use the first address
       } 
@@ -69,18 +68,18 @@ export class TransactionAPI extends API {
           case 'polygon': // Polygon Mainnet
             switch (tx.name) {
               case 'MarketOrder':
-                res = await tran.polymarketSendTransaction(signer, tx);
+                res = await tran.polymarketSendTransaction(signer as tran.EtherSigner|tran.WagmiSigner, tx);
                 break;
               default:
-                res = await tran.evmSendTransaction(signer, tx);
+                res = await tran.evmSendTransaction(signer as tran.EtherSigner|tran.WagmiSigner, tx);
             }
             break;
           case 'solana': // Solana
-            res = await tran.solSendTransaction(signer, tx, rpcUrls);
+            res = await tran.solSendTransaction(signer as tran.SolanaSigner, tx, rpcUrls);
             break;
 
           default: // evm
-            res = await tran.evmSendTransaction(signer, tx);
+            res = await tran.evmSendTransaction(signer as tran.EtherSigner|tran.WagmiSigner, tx);
         }
 
         if (res.hash) {
