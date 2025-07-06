@@ -1,10 +1,10 @@
 import { ClobClient, OrderType } from "@polymarket/clob-client";
-import { Signer } from "./index";
+import { EtherSigner, isWagmiSigner, WagmiSigner } from "./index";
 
 const chainId = 137;
 const clobUrl = 'https://clob.polymarket.com/'
 
-async function getPolyApiKey(signer: Signer): Promise<any> {
+async function getPolyApiKey(signer: EtherSigner|WagmiSigner): Promise<any> {
     const clobSigner = signer as any
 
     if ((signer as any).account && !clobSigner._signTypedData) { // for wagmi signer
@@ -38,7 +38,7 @@ async function getPolyApiKey(signer: Signer): Promise<any> {
     return { clobSigner, creds }
 }
 
-export async function polymarketSendTransaction(signer: Signer, tx: any): Promise<{ hash: string | undefined, orderId?: string }> {
+export async function polymarketSendTransaction(signer: EtherSigner|WagmiSigner, tx: any): Promise<{ hash: string | undefined, orderId?: string }> {
     try {
         let data = JSON.parse(tx.hex)
         let od = data.data
@@ -49,9 +49,10 @@ export async function polymarketSendTransaction(signer: Signer, tx: any): Promis
         const { signature: existingSignature, ...cleanOrderData } = orderData;
         let signature: string;
 
-        if (signer.signTypedData && signer.signTypedData.length == 1 && signer.account) { // wagmi wallet
-            signature = await signer.signTypedData({
-                account: signer.account,
+        if ( isWagmiSigner(signer)) { // wagmi wallet
+            const s = signer as WagmiSigner
+            signature = await s.signTypedData({
+                account: s.account,
                 domain: typedData.domain,
                 types: typedData.types,
                 primaryType: typedData.primaryType,
@@ -72,7 +73,7 @@ export async function polymarketSendTransaction(signer: Signer, tx: any): Promis
         if (res.error) {
             throw new Error(`polymarket postOrder error: ${res.error}`)
         } else {
-            let hash = res.transactionHash || res.transactionHashes?.[0]
+            let hash = res.transactionHash || res.transactionsHashes?.[0]
             return { hash: hash, orderId: res.orderId } // orderId is polymarket specific
         }
 
