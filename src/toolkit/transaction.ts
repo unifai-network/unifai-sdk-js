@@ -1,0 +1,373 @@
+import { API, APIConfig, TRANSACTION_API_ENDPOINT } from '../common';
+import { ActionContext } from './context';
+import { WagmiSigner, EtherSigner, SolanaSigner, SendConfig, isEtherSigner, isSolanaSigner, isWagmiSigner } from './types';
+import { ethers } from "ethers";
+import * as web3 from '@solana/web3.js';
+import { ClobClient, OrderType, Chain } from "@polymarket/clob-client";
+import { SignedOrder } from "@polymarket/order-utils";
+import { ApiKeyCreds, createL2Headers, } from "@polymarket/clob-client";
+import { orderToJson } from "@polymarket/clob-client/dist/utilities";
+import { JsonRpcSigner } from "@ethersproject/providers";
+import { Wallet } from "@ethersproject/wallet";
+
+export class TransactionAPI extends API {
+    constructor(config: APIConfig) {
+        if (!config.endpoint) {
+            config.endpoint = TRANSACTION_API_ENDPOINT;
+        }
+        super(config);
+    }
+
+    public async createTransaction(type: string, ctx: ActionContext, payload: any = {}) {
+        const data = {
+            agentId: ctx.agentId,
+            actionId: ctx.actionId,
+            actionName: ctx.actionName,
+            type,
+            payload,
+        }
+        return await this.request('POST', `/tx/create`, { json: data });
+    }
+
+    public async buildTransaction(txId: string, address: string) {
+        let buildBody = { txId, address };
+        let data = await this.request('POST', `/tx/build`, { json: buildBody });
+        if (!data.success) {
+            throw data.error
+        }
+        return data
+    }
+
+    public async completeTransaction(txId: string, txHash: string, address: string) {
+        let completeBody = { txId, txHash, address };
+        let data = await this.request('POST', `/tx/complete`, { json: completeBody });
+        if (data.success || data.message === 'Transaction completed successfully') {
+            return data;
+        }
+        throw new Error(data.error || 'Transaction completion failed');
+    }
+
+    public async getTransaction(txId: string) {
+        let data = await this.request('GET', `/tx/${txId}`);
+        if (!data.success) {
+            throw data.error
+        }
+        return data
+    }
+
+    public async sendTransaction(chain: string, name: string, txData: any) {
+        console.log('chain:', chain, 'name:', name, 'txData:', txData)
+        txData.chain = chain
+        txData.name = name
+        const data = await this.request('POST', `/tx/sendtransaction`, {
+            json: txData,
+        })
+        if (!data.success) {
+            throw data.error
+        }
+        return data
+    }
+
+    // Sign and Sends a transaction to blockchains.
+    public async signAndSendTransaction(txId: string,
+        signer: EtherSigner | WagmiSigner | SolanaSigner,
+        config?: SendConfig): Promise<{ hash?: string[] }> {
+
+        let address: string = '';
+
+        if (isEtherSigner(signer)) {
+            address = (signer as EtherSigner).address; // ethers signer
+        } else if (isSolanaSigner(signer)) {
+            address = (signer as SolanaSigner).publicKey.toBase58(); // solana provider
+        } else if (isWagmiSigner(signer)) { // wagmi wallet
+            const addresses = await (signer as WagmiSigner).getAddresses(); // ethers signer with getAddresses method
+            if (addresses.length > 0) {
+                address = addresses[0]; // Use the first address
+            }
+        } else {
+            throw new Error('Signer does not have an address or publicKey.');
+        }
+
+        try {
+            let data = await this.buildTransaction(txId, address);
+
+            const transactions = data.transactions
+            if (!transactions || transactions.length === 0) {
+                throw new Error('No transactions to send.')
+            }
+
+            let res;
+            let hashes: string[] = [];
+            for (const tx of transactions) {
+                switch (tx.chain) {
+                    case 'polygon': // Polygon Mainnet
+                        switch (tx.name) {
+                            case 'MarketOrder':
+                                let conf: SendConfig = config || {}
+                                if (!config || !config.proxyUrl) { // if not set, then use apiUri, it's transaction builder.
+                                    conf.proxyUrl = this.apiUri
+                                }
+                                res = await this.polymarketSendTransaction(signer as EtherSigner | WagmiSigner,
+                                    tx, conf);
+                                break;
+                            default:
+                                res = await this.evmSendTransaction(signer as EtherSigner | WagmiSigner, tx);
+                        }
+                        break;
+                    case 'solana': // Solana
+                        res = await this.solSendTransaction(signer as SolanaSigner, tx, config);
+                        break;
+
+                    default: // evm
+                        res = await this.evmSendTransaction(signer as EtherSigner | WagmiSigner, tx);
+                }
+
+                if (res.hash) {
+                    await this.completeTransaction(txId, res.hash, address);
+                    hashes.push(res.hash);
+                }
+            }
+
+            return { hash: hashes };
+
+        } catch (error) {
+            throw new Error(`signAdnSendTransaction: ${error}`);
+        }
+    }
+
+    // ------------------------------------------------
+    // the following are private members.
+    // ------------------------------------------------
+
+    private async evmSendTransaction(signer: EtherSigner | WagmiSigner, tx: any): Promise<{ hash: string | undefined }> {
+        try {
+            const unsignedTx = ethers.Transaction.from(tx.hex); // Validate the transaction format
+
+            const txParams: any = {
+                to: unsignedTx.to ? unsignedTx.to as `0x${string}` : ethers.ZeroAddress,
+                data: unsignedTx.data as `0x${string}`,
+            };
+
+            if (unsignedTx.value) { txParams.value = unsignedTx.value; }
+            if (unsignedTx.gasLimit) { txParams.gasLimit = unsignedTx.gasLimit; }
+            if (unsignedTx.maxFeePerGas) { txParams.maxFeePerGas = unsignedTx.maxFeePerGas; }
+            if (unsignedTx.maxPriorityFeePerGas) { txParams.maxPriorityFeePerGas = unsignedTx.maxPriorityFeePerGas; }
+
+            if (signer.sendTransaction) {
+                const txResponse = await signer.sendTransaction(txParams);
+
+                return { hash: txResponse.hash, };
+            } else {
+                throw new Error('Signer should have sendTransaction method for evm.');
+            }
+
+        } catch (error) {
+            throw new Error(`evmSendTransaction: ${error}`);
+        }
+    }
+
+    private async solSendTransaction(signer: SolanaSigner, tx: any, config?: SendConfig): Promise<{ hash: string | undefined }> {
+        const transactionBuffer = new Uint8Array(
+            atob(tx.base64)
+                .split('')
+                .map((c) => c.charCodeAt(0)),
+        );
+
+        let transaction;
+        if (tx.type === 'legacy') {
+            transaction = web3.Transaction.from(transactionBuffer);
+        } else {
+            transaction = web3.VersionedTransaction.deserialize(transactionBuffer);
+        }
+
+        let signedTransaction: any;
+        if (signer.signTransaction) {
+            signedTransaction = await signer.signTransaction(transaction);
+        } else {
+            throw new Error('Signer should have signTransaction method for Solana.');
+        }
+
+        const serializedTransaction = Buffer.from(signedTransaction.serialize());
+
+        let lastError: Error | null = null;
+
+        let connection;
+        let signature;
+        const successfulTransactions: { type: string; hash: string }[] = [];
+
+        if (!config || !config.rpcUrls || config.rpcUrls.length === 0) {
+            try {
+                connection = new web3.Connection(web3.clusterApiUrl('mainnet-beta'), 'confirmed');
+                signature = await connection.sendRawTransaction(serializedTransaction);
+                successfulTransactions.push({
+                    type: tx.type,
+                    hash: signature,
+                });
+
+            } catch (error) {
+                console.error(`Error sending transaction to clusterApiUrl('mainnet-beta'):`, error);
+                lastError = error as Error;
+            }
+        } else {
+            for (const rpcUrl of config.rpcUrls) {
+                try {
+                    connection = new web3.Connection(rpcUrl, 'confirmed');
+                    signature = await connection.sendRawTransaction(serializedTransaction);
+                    successfulTransactions.push({
+                        type: tx.type,
+                        hash: signature,
+                    });
+                    break;
+
+                } catch (error) {
+                    console.error(`Error sending transaction to ${rpcUrl}:`, error);
+                    lastError = error as Error;
+                    continue;
+                }
+            }
+        }
+
+        if (lastError && successfulTransactions.length === 0) {
+            throw new Error(`${lastError?.message}, you may set your own RPC URLs when calling signAndSendTransaction`);
+        }
+
+        const blockhash = await connection!.getLatestBlockhash();
+        let transactionResult;
+        if (signedTransaction instanceof web3.Transaction) {
+            transactionResult = await connection!.confirmTransaction(
+                {
+                    signature: signature!,
+                    blockhash: signedTransaction.recentBlockhash ?? blockhash.blockhash,
+                    lastValidBlockHeight:
+                        signedTransaction.lastValidBlockHeight ?? blockhash.lastValidBlockHeight,
+                },
+                'confirmed',
+            );
+        } else {
+            transactionResult = await connection!.confirmTransaction(
+                {
+                    signature: signature!,
+                    blockhash: signedTransaction._message?.recentBlockhash ?? blockhash.blockhash,
+                    lastValidBlockHeight: signedTransaction.lastValidBlockHeight ?? blockhash.lastValidBlockHeight,
+                },
+                'confirmed',
+            );
+        }
+
+        if (transactionResult.value.err) {
+            throw new Error(`Transaction failed: ${JSON.stringify(transactionResult.value.err)}`);
+        }
+
+        return { hash: signature }
+    }
+
+    private async polymarketSendTransaction(signer: EtherSigner | WagmiSigner, tx: any,
+        config: SendConfig): Promise<{ hash: string | undefined, orderId?: string }> {
+        try {
+            let data = JSON.parse(tx.hex)
+            let od = data.data
+            let orderData = od.orderData
+            let typedData = od.typedData
+            let orderType = od.orderType || OrderType.FAK; // FOK
+
+            const { signature: existingSignature, ...cleanOrderData } = orderData;
+            let signature: string;
+
+            if (isWagmiSigner(signer)) { // wagmi wallet
+                const s = signer as WagmiSigner
+                signature = await s.signTypedData({
+                    account: s.account,
+                    domain: typedData.domain,
+                    types: typedData.types,
+                    primaryType: typedData.primaryType,
+                    message: cleanOrderData
+                });
+            } else if (signer.signTypedData) { // ethers wallet
+                delete typedData.types.EIP712Domain
+                signature = await signer.signTypedData(typedData.domain, typedData.types, cleanOrderData);
+            } else {
+                throw new Error("Signer doesn't have signTypedData");
+            }
+            orderData.signature = signature;
+
+            const { creds } = await this.getPolyApiKey(signer)
+
+            const res = await this.polymarketPostOrder(signer, orderData, orderType, creds, config)
+            if (res.error) {
+                throw new Error(`polymarketPostOrder error: ${res.error}`)
+            } else {
+                let hash = res.transactionHash || res.transactionsHashes?.[0]
+                return { hash: hash, orderId: res.orderId } // orderId is polymarket specific
+            }
+
+        } catch (error) {
+            throw new Error(`polymarketSendTransaction: ${error}`)
+        }
+    }
+
+    private async getPolyApiKey(signer: EtherSigner | WagmiSigner): Promise<any> {
+        const clobSigner = signer as any
+
+        if ((signer as any).account && !clobSigner._signTypedData) { // for wagmi signer
+            clobSigner._signTypedData = async (domain: any, types: any, value: any) => {
+                return await (signer as any).signTypedData({
+                    account: (signer as any).account,
+                    domain: domain,
+                    types: types,
+                    primaryType: Object.keys(types).find(key => key !== 'EIP712Domain') || 'EIP712Domain',
+                    message: value
+                });
+            };
+        } else {
+            clobSigner._signTypedData = clobSigner.signTypedData;
+        }
+
+        if (!clobSigner.getAddress) {
+            clobSigner.getAddress = async () => {
+                return (signer as any).account?.address || (signer as any).address;
+            }
+        }
+
+        const polymarketClobUrl = 'https://clob.polymarket.com/'
+        const clobClient = new ClobClient(polymarketClobUrl, Chain.POLYGON, clobSigner)
+        let creds: any
+        try {
+            creds = await clobClient.deriveApiKey()
+        } catch (error) {
+            throw new Error(`polymarke derive api key error: ${error}`)
+        }
+
+        return { clobSigner, creds }
+    }
+
+    private async polymarketPostOrder<T extends OrderType = OrderType.GTC>(
+        signer: any, order: SignedOrder,
+        orderType: T = OrderType.GTC as T,
+        creds: ApiKeyCreds, config: SendConfig
+    ): Promise<any> {
+        if (!config.proxyUrl) {
+            throw new Error('polymarketSendTransaction needs to config proxy url.')
+        }
+
+        const endpoint = "/order"
+        const orderPayload = orderToJson(order, creds?.key || "", orderType);
+
+        const l2HeaderArgs = {
+            method: "POST",
+            requestPath: endpoint,
+            body: JSON.stringify(orderPayload),
+        };
+
+        const headers = await createL2Headers(
+            signer as Wallet | JsonRpcSigner,
+            creds as ApiKeyCreds,
+            l2HeaderArgs,
+        );
+
+        const data = { headers, data: orderPayload }
+        const res = this.sendTransaction("polygon", "MarketOrder", data)
+
+        return res
+    }
+
+}
