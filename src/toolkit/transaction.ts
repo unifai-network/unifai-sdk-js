@@ -3,9 +3,8 @@ import { ActionContext } from './context';
 import { WagmiSigner, EtherSigner, SolanaSigner, SendConfig, isEtherSigner, isSolanaSigner, isWagmiSigner } from './types';
 import { ethers } from "ethers";
 import * as web3 from '@solana/web3.js';
-import { ClobClient, OrderType, Chain } from "@polymarket/clob-client";
+import { ClobClient, OrderType, Chain, ApiKeyCreds, createL2Headers } from "@polymarket/clob-client";
 import { SignedOrder } from "@polymarket/order-utils";
-import { ApiKeyCreds, createL2Headers, } from "@polymarket/clob-client";
 import { orderToJson } from "@polymarket/clob-client/dist/utilities";
 import { JsonRpcSigner } from "@ethersproject/providers";
 import { Wallet } from "@ethersproject/wallet";
@@ -157,7 +156,7 @@ export class TransactionAPI extends API {
             if (signer.sendTransaction) {
                 const txResponse = await signer.sendTransaction(txParams);
 
-                return { hash: txResponse.hash, };
+                return { hash: txResponse.hash || txResponse, };
             } else {
                 throw new Error('Signer should have sendTransaction method for evm.');
             }
@@ -284,8 +283,9 @@ export class TransactionAPI extends API {
                     message: cleanOrderData
                 });
             } else if (signer.signTypedData) { // ethers wallet
-                delete typedData.types.EIP712Domain
-                signature = await signer.signTypedData(typedData.domain, typedData.types, cleanOrderData);
+                const typesCopy = { ...typedData.types };
+                delete typesCopy.EIP712Domain;
+                signature = await signer.signTypedData(typedData.domain, typesCopy, cleanOrderData);
             } else {
                 throw new Error("Signer doesn't have signTypedData");
             }
@@ -311,16 +311,49 @@ export class TransactionAPI extends API {
 
         if ((signer as any).account && !clobSigner._signTypedData) { // for wagmi signer
             clobSigner._signTypedData = async (domain: any, types: any, value: any) => {
+                
+                const typeKeys = Object.keys(types);
+                let primaryType = typeKeys.find(key => key !== 'EIP712Domain');
+                
+                if (!primaryType && typeKeys.length > 0) {
+                    if (typeKeys.length === 1 && typeKeys[0] === 'EIP712Domain') {
+                        console.error('Only EIP712Domain found in types, this may indicate a configuration issue');
+                        throw new Error('Invalid types configuration: only EIP712Domain found, missing data structure types');
+                    }
+                    primaryType = typeKeys[0];
+                }
+                
+                if (!primaryType) {
+                    console.error('No valid primary type found:', { typeKeys, types });
+                    throw new Error('No valid primary type found in types object');
+                }
+                
                 return await (signer as any).signTypedData({
                     account: (signer as any).account,
                     domain: domain,
                     types: types,
-                    primaryType: Object.keys(types).find(key => key !== 'EIP712Domain') || 'EIP712Domain',
+                    primaryType: primaryType,
                     message: value
                 });
             };
         } else {
-            clobSigner._signTypedData = clobSigner.signTypedData;
+            const originalSignTypedData = clobSigner.signTypedData;
+            clobSigner._signTypedData = async (domain: any, types: any, value: any) => {
+                
+                const typesCopy = { ...types };
+                const originalKeys = Object.keys(types);
+                const dataTypes = originalKeys.filter(key => key !== 'EIP712Domain');
+                if (dataTypes.length === 0) {
+                    console.error('No data structure types found, only EIP712Domain');
+                    throw new Error('Invalid types configuration: missing data structure types for ethers signing');
+                }
+                
+                if (typesCopy.EIP712Domain) {
+                    delete typesCopy.EIP712Domain;
+                }
+                
+                return await originalSignTypedData.call(clobSigner, domain, typesCopy, value);
+            };
         }
 
         if (!clobSigner.getAddress) {
@@ -335,6 +368,9 @@ export class TransactionAPI extends API {
         try {
             creds = await clobClient.deriveApiKey()
         } catch (error) {
+            if (error instanceof Error && error.message.includes('Invalid primary type')) {
+                throw new Error(`Polymarket API key derivation failed: ${error.message}. `);
+            }
             throw new Error(`polymarke derive api key error: ${error}`)
         }
 
