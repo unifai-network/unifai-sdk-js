@@ -56,7 +56,6 @@ export class TransactionAPI extends API {
     }
 
     public async sendTransaction(chain: string, name: string, txData: any) {
-        console.log('chain:', chain, 'name:', name, 'txData:', txData)
         txData.chain = chain
         txData.name = name
         const data = await this.request('POST', `/tx/sendtransaction`, {
@@ -123,9 +122,11 @@ export class TransactionAPI extends API {
                 }
 
                 if (res.hash) {
-                    await this.completeTransaction(txId, res.hash, address);
                     hashes.push(res.hash);
                 }
+            }
+            if (hashes.length > 0) { // complete the transactions by last hash
+                await this.completeTransaction(txId, hashes[hashes.length-1], address);
             }
 
             return { hash: hashes };
