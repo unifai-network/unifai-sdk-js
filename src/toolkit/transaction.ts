@@ -3,11 +3,13 @@ import { ActionContext } from './context';
 import { WagmiSigner, EtherSigner, SolanaSigner, SendConfig, isEtherSigner, isSolanaSigner, isWagmiSigner } from './types';
 import { ethers } from "ethers";
 import * as web3 from '@solana/web3.js';
-import { ClobClient, OrderType, Chain, ApiKeyCreds, createL2Headers } from "@polymarket/clob-client";
+import { OrderType, ApiKeyCreds,} from "@polymarket/clob-client";
 import { SignedOrder } from "@polymarket/order-utils";
 import { orderToJson } from "@polymarket/clob-client/dist/utilities";
 import { JsonRpcSigner } from "@ethersproject/providers";
 import { Wallet } from "@ethersproject/wallet";
+import { deriveApiKey } from "./polymarket/apikey"
+import { createL2Headers } from "./polymarket/l2header"
 
 export class TransactionAPI extends API {
     constructor(config: APIConfig) {
@@ -106,7 +108,7 @@ export class TransactionAPI extends API {
                                     conf.proxyUrl = this.apiUri
                                 }
                                 res = await this.polymarketSendTransaction(signer as EtherSigner | WagmiSigner,
-                                    tx, conf);
+                                    tx, conf, address);
                                 break;
                             default:
                                 res = await this.evmSendTransaction(signer as EtherSigner | WagmiSigner, tx);
@@ -262,7 +264,7 @@ export class TransactionAPI extends API {
     }
 
     private async polymarketSendTransaction(signer: EtherSigner | WagmiSigner, tx: any,
-        config: SendConfig): Promise<{ hash: string | undefined, orderId?: string }> {
+        config: SendConfig, address: string): Promise<{ hash: string | undefined, orderId?: string }> {
         try {
             let data = JSON.parse(tx.hex)
             let od = data.data
@@ -291,7 +293,7 @@ export class TransactionAPI extends API {
             }
             orderData.signature = signature;
 
-            const { creds } = await this.getPolyApiKey(signer)
+            const creds = await deriveApiKey(address, signer)
 
             const res = await this.polymarketPostOrder(signer, orderData, orderType, creds, config)
             if (res.error) {
@@ -304,77 +306,6 @@ export class TransactionAPI extends API {
         } catch (error) {
             throw new Error(`polymarketSendTransaction: ${error}`)
         }
-    }
-
-    private async getPolyApiKey(signer: EtherSigner | WagmiSigner): Promise<any> {
-        const clobSigner = signer as any
-
-        if ((signer as any).account && !clobSigner._signTypedData) { // for wagmi signer
-            clobSigner._signTypedData = async (domain: any, types: any, value: any) => {
-                
-                const typeKeys = Object.keys(types);
-                let primaryType = typeKeys.find(key => key !== 'EIP712Domain');
-                
-                if (!primaryType && typeKeys.length > 0) {
-                    if (typeKeys.length === 1 && typeKeys[0] === 'EIP712Domain') {
-                        console.error('Only EIP712Domain found in types, this may indicate a configuration issue');
-                        throw new Error('Invalid types configuration: only EIP712Domain found, missing data structure types');
-                    }
-                    primaryType = typeKeys[0];
-                }
-                
-                if (!primaryType) {
-                    console.error('No valid primary type found:', { typeKeys, types });
-                    throw new Error('No valid primary type found in types object');
-                }
-                
-                return await (signer as any).signTypedData({
-                    account: (signer as any).account,
-                    domain: domain,
-                    types: types,
-                    primaryType: primaryType,
-                    message: value
-                });
-            };
-        } else {
-            const originalSignTypedData = clobSigner.signTypedData;
-            clobSigner._signTypedData = async (domain: any, types: any, value: any) => {
-                
-                const typesCopy = { ...types };
-                const originalKeys = Object.keys(types);
-                const dataTypes = originalKeys.filter(key => key !== 'EIP712Domain');
-                if (dataTypes.length === 0) {
-                    console.error('No data structure types found, only EIP712Domain');
-                    throw new Error('Invalid types configuration: missing data structure types for ethers signing');
-                }
-                
-                if (typesCopy.EIP712Domain) {
-                    delete typesCopy.EIP712Domain;
-                }
-                
-                return await originalSignTypedData.call(clobSigner, domain, typesCopy, value);
-            };
-        }
-
-        if (!clobSigner.getAddress) {
-            clobSigner.getAddress = async () => {
-                return (signer as any).account?.address || (signer as any).address;
-            }
-        }
-
-        const polymarketClobUrl = 'https://clob.polymarket.com/'
-        const clobClient = new ClobClient(polymarketClobUrl, Chain.POLYGON, clobSigner)
-        let creds: any
-        try {
-            creds = await clobClient.deriveApiKey()
-        } catch (error) {
-            if (error instanceof Error && error.message.includes('Invalid primary type')) {
-                throw new Error(`Polymarket API key derivation failed: ${error.message}. `);
-            }
-            throw new Error(`polymarke derive api key error: ${error}`)
-        }
-
-        return { clobSigner, creds }
     }
 
     private async polymarketPostOrder<T extends OrderType = OrderType.GTC>(
