@@ -1,6 +1,6 @@
 import { API, APIConfig, TRANSACTION_API_ENDPOINT } from '../common';
 import { ActionContext } from './context';
-import { WagmiSigner, EtherSigner, SolanaSigner, SendConfig, isEtherSigner, isSolanaSigner, isWagmiSigner } from './types';
+import { WagmiSigner, EtherSigner, SolanaSigner, SendConfig, isEtherSigner, isSolanaSigner, isWagmiSigner, Signer } from './types';
 import { ethers } from "ethers";
 import * as web3 from '@solana/web3.js';
 import { OrderType, ApiKeyCreds,} from "@polymarket/clob-client";
@@ -30,7 +30,8 @@ export class TransactionAPI extends API {
         return await this.request('POST', `/tx/create`, { json: data });
     }
 
-    public async buildTransaction(txId: string, address: string) {
+    public async buildTransaction(txId: string, signerOrAddress: Signer | string) {
+        let address = typeof signerOrAddress === 'string' ? signerOrAddress : await this.getAddress(signerOrAddress);
         let buildBody = { txId, address };
         let data = await this.request('POST', `/tx/build`, { json: buildBody });
         if (!data.success) {
@@ -69,35 +70,20 @@ export class TransactionAPI extends API {
     }
 
     // Sign and Sends a transaction to blockchains.
-    public async signAndSendTransaction(txId: string,
-        signer: EtherSigner | WagmiSigner | SolanaSigner,
-        config?: SendConfig): Promise<{ hash?: string[] }> {
+    public async signAndSendTransaction(txId: string, signer: Signer, config?: SendConfig): Promise<{ hash?: string[] }> {
+        let address = await this.getAddress(signer);
 
-        let address: string = '';
+        let data = config?.txData || await this.buildTransaction(txId, signer);
 
-        if (isEtherSigner(signer)) {
-            address = (signer as EtherSigner).address; // ethers signer
-        } else if (isSolanaSigner(signer)) {
-            address = (signer as SolanaSigner).publicKey.toBase58(); // solana provider
-        } else if (isWagmiSigner(signer)) { // wagmi wallet
-            const addresses = await (signer as WagmiSigner).getAddresses(); // ethers signer with getAddresses method
-            if (addresses.length > 0) {
-                address = addresses[0]; // Use the first address
-            }
-        } else {
-            throw new Error('Signer does not have an address or publicKey.');
+        const transactions = data.transactions
+        if (!transactions || transactions.length === 0) {
+            throw new Error('No transactions to send.')
         }
 
+        let res;
+        let hashes: string[] = [];
+
         try {
-            let data = await this.buildTransaction(txId, address);
-
-            const transactions = data.transactions
-            if (!transactions || transactions.length === 0) {
-                throw new Error('No transactions to send.')
-            }
-
-            let res;
-            let hashes: string[] = [];
             for (const tx of transactions) {
                 switch (tx.chain) {
                     case 'polygon': // Polygon Mainnet
@@ -126,20 +112,39 @@ export class TransactionAPI extends API {
                     hashes.push(res.hash);
                 }
             }
+
             if (hashes.length > 0) { // complete the transactions by last hash
                 await this.completeTransaction(txId, hashes[hashes.length-1], address);
             }
 
             return { hash: hashes };
-
         } catch (error) {
-            throw new Error(`signAdnSendTransaction: ${error}`);
+            throw new Error(`signAndSendTransaction error: ${JSON.stringify({ successfulTransactions: hashes, error: error })}`);
         }
     }
 
     // ------------------------------------------------
     // the following are private members.
     // ------------------------------------------------
+
+    private async getAddress(signer: Signer) {
+        let address: string = '';
+
+        if (isEtherSigner(signer)) {
+            address = (signer as EtherSigner).address; // ethers signer
+        } else if (isSolanaSigner(signer)) {
+            address = (signer as SolanaSigner).publicKey.toBase58(); // solana provider
+        } else if (isWagmiSigner(signer)) { // wagmi wallet
+            const addresses = await (signer as WagmiSigner).getAddresses(); // ethers signer with getAddresses method
+            if (addresses.length > 0) {
+                address = addresses[0]; // Use the first address
+            }
+        } else {
+            throw new Error('Signer does not have an address or publicKey.');
+        }
+
+        return address;
+    }
 
     private async evmSendTransaction(signer: EtherSigner | WagmiSigner, tx: any): Promise<{ hash: string | undefined }> {
         try {
