@@ -3,7 +3,7 @@ import { ActionContext } from './context';
 import { WagmiSigner, EtherSigner, SolanaSigner, SendConfig, isEtherSigner, isSolanaSigner, isWagmiSigner, Signer } from './types';
 import { ethers } from "ethers";
 import * as web3 from '@solana/web3.js';
-import { OrderType, ApiKeyCreds,} from "@polymarket/clob-client";
+import { OrderType, ApiKeyCreds, } from "@polymarket/clob-client";
 import { SignedOrder } from "@polymarket/order-utils";
 import { orderToJson } from "@polymarket/clob-client/dist/utilities";
 import { JsonRpcSigner } from "@ethersproject/providers";
@@ -114,7 +114,7 @@ export class TransactionAPI extends API {
             }
 
             if (hashes.length > 0) { // complete the transactions by last hash
-                await this.completeTransaction(txId, hashes[hashes.length-1], address);
+                await this.completeTransaction(txId, hashes[hashes.length - 1], address);
             }
 
             return { hash: hashes };
@@ -162,6 +162,23 @@ export class TransactionAPI extends API {
 
             if (signer.sendTransaction) {
                 const txResponse = await signer.sendTransaction(txParams);
+                const hash = txResponse.hash || txResponse
+
+                let receipt: any
+                if (isWagmiSigner(signer)) {
+                    const s = signer as WagmiSigner
+                    if (s.waitForTransactionReceipt) {
+                        receipt = await s.waitForTransactionReceipt({ hash });
+                        if (receipt.status != 'success') {
+                            throw new Error('transaction reverted')
+                        }
+                    }
+                } else if (isEtherSigner(signer)) {
+                    receipt = await txResponse.wait()
+                    if (!receipt || receipt.status == 0) {
+                        throw new Error('transaction reverted')
+                    }
+                }
 
                 return { hash: txResponse.hash || txResponse, };
             } else {
