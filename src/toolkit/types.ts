@@ -20,6 +20,7 @@ export interface WagmiSigner {
 
     sendTransaction: (tx: any) => Promise<any>;
     signTypedData: (data: any) => Promise<string>
+    waitForTransactionReceipt?: (h: {hash: string}) => Promise<any>
 }
 
 export interface SolanaSigner {
