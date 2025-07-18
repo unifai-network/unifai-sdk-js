@@ -165,7 +165,10 @@ export class TransactionAPI extends API {
                 let hash: string;
                 try {
                     txResponse = await signer.sendTransaction(txParams);
-                    hash = txResponse.hash || txResponse
+                    hash = typeof txResponse === 'string' ? txResponse : txResponse.hash;
+                    if (!hash) {
+                        throw new Error('Transaction response does not contain a hash');
+                    }
                 } catch (error: any) {
                     throw new Error(`signer.sendTransaction: ${error}`);
                 }
@@ -186,7 +189,7 @@ export class TransactionAPI extends API {
                     }
                 }
 
-                return { hash: txResponse.hash || txResponse, };
+                return { hash: hash };
             } else {
                 throw new Error('Signer should have sendTransaction method for evm.');
             }
@@ -221,19 +224,20 @@ export class TransactionAPI extends API {
             const serializedTransaction = Buffer.from(signedTransaction.serialize());
 
             let lastError: Error | null = null;
-
-            let connection;
-            let signature;
+            let connection: web3.Connection | null = null;
+            let signature: string | null = null;
             const successfulTransactions: { type: string; hash: string }[] = [];
 
             if (!config || !config.rpcUrls || config.rpcUrls.length === 0) {
                 try {
                     connection = new web3.Connection(web3.clusterApiUrl('mainnet-beta'), 'confirmed');
                     signature = await connection.sendRawTransaction(serializedTransaction);
-                    successfulTransactions.push({
-                        type: tx.type,
-                        hash: signature,
-                    });
+                    if (signature) {
+                        successfulTransactions.push({
+                            type: tx.type,
+                            hash: signature,
+                        });
+                    }
 
                 } catch (error) {
                     console.error(`Error sending transaction to clusterApiUrl('mainnet-beta'):`, error);
@@ -244,10 +248,12 @@ export class TransactionAPI extends API {
                     try {
                         connection = new web3.Connection(rpcUrl, 'confirmed');
                         signature = await connection.sendRawTransaction(serializedTransaction);
-                        successfulTransactions.push({
-                            type: tx.type,
-                            hash: signature,
-                        });
+                        if (signature) {
+                            successfulTransactions.push({
+                                type: tx.type,
+                                hash: signature,
+                            });
+                        }
                         break;
 
                     } catch (error) {
@@ -262,12 +268,19 @@ export class TransactionAPI extends API {
                 throw new Error(`${lastError?.message}, set RPC URLs when calling signAndSendTransaction`);
             }
 
-            const blockhash = await connection!.getLatestBlockhash();
+            if (!connection || !signature) {
+                throw new Error('Failed to establish connection or get signature');
+            }
+
+            const finalConnection = connection;
+            const finalSignature = signature;
+
+            const blockhash = await finalConnection.getLatestBlockhash();
             let transactionResult;
             if (signedTransaction instanceof web3.Transaction) {
-                transactionResult = await connection!.confirmTransaction(
+                transactionResult = await finalConnection.confirmTransaction(
                     {
-                        signature: signature!,
+                        signature: finalSignature,
                         blockhash: signedTransaction.recentBlockhash ?? blockhash.blockhash,
                         lastValidBlockHeight:
                             signedTransaction.lastValidBlockHeight ?? blockhash.lastValidBlockHeight,
@@ -275,9 +288,9 @@ export class TransactionAPI extends API {
                     'confirmed',
                 );
             } else {
-                transactionResult = await connection!.confirmTransaction(
+                transactionResult = await finalConnection.confirmTransaction(
                     {
-                        signature: signature!,
+                        signature: finalSignature,
                         blockhash: signedTransaction._message?.recentBlockhash ?? blockhash.blockhash,
                         lastValidBlockHeight: signedTransaction.lastValidBlockHeight ?? blockhash.lastValidBlockHeight,
                     },
@@ -286,7 +299,7 @@ export class TransactionAPI extends API {
             }
 
             if (transactionResult.value.err) {
-                throw new Error(transactionResult.value.err);
+                throw new Error(`Transaction failed: ${transactionResult.value.err}`);
             }
 
             return { hash: signature }
@@ -297,7 +310,7 @@ export class TransactionAPI extends API {
     }
 
     private async polymarketSendTransaction(signer: EtherSigner | WagmiSigner, tx: any,
-            config: SendConfig, address: string): Promise<{ hash: string | undefined, orderId?: string }> {
+        config: SendConfig, address: string): Promise<{ hash: string | undefined, orderId?: string }> {
         try {
             let data = JSON.parse(tx.hex)
             let od = data.data
@@ -327,6 +340,9 @@ export class TransactionAPI extends API {
             orderData.signature = signature;
 
             const creds = await deriveApiKey(address, signer)
+            if (!creds) {
+                throw new Error('Failed to derive API key for Polymarket');
+            }
 
             const res = await this.polymarketPostOrder(signer, orderData, orderType, creds, config)
             if (res.error) {
@@ -366,7 +382,7 @@ export class TransactionAPI extends API {
         );
 
         const data = { headers, data: orderPayload }
-        const res = this.sendTransaction("polygon", "MarketOrder", data)
+        const res = await this.sendTransaction("polygon", "MarketOrder", data)
 
         return res
     }
