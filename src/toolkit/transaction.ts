@@ -118,9 +118,8 @@ export class TransactionAPI extends API {
             }
 
             return { hash: hashes };
-        } catch (error) {
-            const errInfo = JSON.stringify({ successfulTransactions: hashes, error: error })
-            throw new Error(`signAndSendTransaction error: ${errInfo}`);
+        } catch (error: any) {
+            throw new Error(error);
         }
     }
 
@@ -162,8 +161,14 @@ export class TransactionAPI extends API {
             if (unsignedTx.maxPriorityFeePerGas) { txParams.maxPriorityFeePerGas = unsignedTx.maxPriorityFeePerGas; }
 
             if (signer.sendTransaction) {
-                const txResponse = await signer.sendTransaction(txParams);
-                const hash = txResponse.hash || txResponse
+                let txResponse: any;
+                let hash: string;
+                try {
+                    txResponse = await signer.sendTransaction(txParams);
+                    hash = txResponse.hash || txResponse
+                } catch (error: any) {
+                    throw new Error(`signer.sendTransaction: ${error}`);
+                }
 
                 let receipt: any
                 if (isWagmiSigner(signer)) {
@@ -192,103 +197,107 @@ export class TransactionAPI extends API {
     }
 
     private async solSendTransaction(signer: SolanaSigner, tx: any, config?: SendConfig): Promise<{ hash: string | undefined }> {
-        const transactionBuffer = new Uint8Array(
-            atob(tx.base64)
-                .split('')
-                .map((c) => c.charCodeAt(0)),
-        );
+        try {
+            const transactionBuffer = new Uint8Array(
+                atob(tx.base64)
+                    .split('')
+                    .map((c) => c.charCodeAt(0)),
+            );
 
-        let transaction;
-        if (tx.type === 'legacy') {
-            transaction = web3.Transaction.from(transactionBuffer);
-        } else {
-            transaction = web3.VersionedTransaction.deserialize(transactionBuffer);
-        }
-
-        let signedTransaction: any;
-        if (signer.signTransaction) {
-            signedTransaction = await signer.signTransaction(transaction);
-        } else {
-            throw new Error('Signer should have signTransaction method for Solana.');
-        }
-
-        const serializedTransaction = Buffer.from(signedTransaction.serialize());
-
-        let lastError: Error | null = null;
-
-        let connection;
-        let signature;
-        const successfulTransactions: { type: string; hash: string }[] = [];
-
-        if (!config || !config.rpcUrls || config.rpcUrls.length === 0) {
-            try {
-                connection = new web3.Connection(web3.clusterApiUrl('mainnet-beta'), 'confirmed');
-                signature = await connection.sendRawTransaction(serializedTransaction);
-                successfulTransactions.push({
-                    type: tx.type,
-                    hash: signature,
-                });
-
-            } catch (error) {
-                console.error(`Error sending transaction to clusterApiUrl('mainnet-beta'):`, error);
-                lastError = error as Error;
+            let transaction;
+            if (tx.type === 'legacy') {
+                transaction = web3.Transaction.from(transactionBuffer);
+            } else {
+                transaction = web3.VersionedTransaction.deserialize(transactionBuffer);
             }
-        } else {
-            for (const rpcUrl of config.rpcUrls) {
+
+            let signedTransaction: any;
+            if (signer.signTransaction) {
+                signedTransaction = await signer.signTransaction(transaction);
+            } else {
+                throw new Error('Signer should have signTransaction method for Solana.');
+            }
+
+            const serializedTransaction = Buffer.from(signedTransaction.serialize());
+
+            let lastError: Error | null = null;
+
+            let connection;
+            let signature;
+            const successfulTransactions: { type: string; hash: string }[] = [];
+
+            if (!config || !config.rpcUrls || config.rpcUrls.length === 0) {
                 try {
-                    connection = new web3.Connection(rpcUrl, 'confirmed');
+                    connection = new web3.Connection(web3.clusterApiUrl('mainnet-beta'), 'confirmed');
                     signature = await connection.sendRawTransaction(serializedTransaction);
                     successfulTransactions.push({
                         type: tx.type,
                         hash: signature,
                     });
-                    break;
 
                 } catch (error) {
-                    console.error(`Error sending transaction to ${rpcUrl}:`, error);
+                    console.error(`Error sending transaction to clusterApiUrl('mainnet-beta'):`, error);
                     lastError = error as Error;
-                    continue;
+                }
+            } else {
+                for (const rpcUrl of config.rpcUrls) {
+                    try {
+                        connection = new web3.Connection(rpcUrl, 'confirmed');
+                        signature = await connection.sendRawTransaction(serializedTransaction);
+                        successfulTransactions.push({
+                            type: tx.type,
+                            hash: signature,
+                        });
+                        break;
+
+                    } catch (error) {
+                        console.error(`Error sending transaction to ${rpcUrl}:`, error);
+                        lastError = error as Error;
+                        continue;
+                    }
                 }
             }
-        }
 
-        if (lastError && successfulTransactions.length === 0) {
-            throw new Error(`${lastError?.message}, you may set your own RPC URLs when calling signAndSendTransaction`);
-        }
+            if (lastError && successfulTransactions.length === 0) {
+                throw new Error(`${lastError?.message}, set RPC URLs when calling signAndSendTransaction`);
+            }
 
-        const blockhash = await connection!.getLatestBlockhash();
-        let transactionResult;
-        if (signedTransaction instanceof web3.Transaction) {
-            transactionResult = await connection!.confirmTransaction(
-                {
-                    signature: signature!,
-                    blockhash: signedTransaction.recentBlockhash ?? blockhash.blockhash,
-                    lastValidBlockHeight:
-                        signedTransaction.lastValidBlockHeight ?? blockhash.lastValidBlockHeight,
-                },
-                'confirmed',
-            );
-        } else {
-            transactionResult = await connection!.confirmTransaction(
-                {
-                    signature: signature!,
-                    blockhash: signedTransaction._message?.recentBlockhash ?? blockhash.blockhash,
-                    lastValidBlockHeight: signedTransaction.lastValidBlockHeight ?? blockhash.lastValidBlockHeight,
-                },
-                'confirmed',
-            );
-        }
+            const blockhash = await connection!.getLatestBlockhash();
+            let transactionResult;
+            if (signedTransaction instanceof web3.Transaction) {
+                transactionResult = await connection!.confirmTransaction(
+                    {
+                        signature: signature!,
+                        blockhash: signedTransaction.recentBlockhash ?? blockhash.blockhash,
+                        lastValidBlockHeight:
+                            signedTransaction.lastValidBlockHeight ?? blockhash.lastValidBlockHeight,
+                    },
+                    'confirmed',
+                );
+            } else {
+                transactionResult = await connection!.confirmTransaction(
+                    {
+                        signature: signature!,
+                        blockhash: signedTransaction._message?.recentBlockhash ?? blockhash.blockhash,
+                        lastValidBlockHeight: signedTransaction.lastValidBlockHeight ?? blockhash.lastValidBlockHeight,
+                    },
+                    'confirmed',
+                );
+            }
 
-        if (transactionResult.value.err) {
-            const errInfo = JSON.stringify(transactionResult.value.err)
-            throw new Error(`Transaction failed: ${errInfo}`);
-        }
+            if (transactionResult.value.err) {
+                throw new Error(transactionResult.value.err);
+            }
 
-        return { hash: signature }
+            return { hash: signature }
+
+        } catch (error) {
+            throw new Error(`solSendTransaction: ${error}`);
+        }
     }
 
     private async polymarketSendTransaction(signer: EtherSigner | WagmiSigner, tx: any,
-        config: SendConfig, address: string): Promise<{ hash: string | undefined, orderId?: string }> {
+            config: SendConfig, address: string): Promise<{ hash: string | undefined, orderId?: string }> {
         try {
             let data = JSON.parse(tx.hex)
             let od = data.data
