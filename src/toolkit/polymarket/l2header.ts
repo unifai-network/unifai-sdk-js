@@ -62,6 +62,10 @@ export const buildPolyHmacSignature = (
         message += body;
     }
 
+    if (!secret) {
+        throw new Error(`buildPolyHmacSignature, secret is empty`);
+    }
+
     const secret2 = secret.replace(/_/g, '/')
     const base64Secret = base64ToBuffer(secret2)
 

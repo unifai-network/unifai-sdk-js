@@ -9,7 +9,7 @@ export async function deriveApiKey(address: string, signer: any): Promise<ApiKey
     try {
         const endpoint = `${polymarketClobUrl}${DERIVE_API_KEY}`;
         if (!signer.getAddress) {
-            signer.getAddress = async ()=>{
+            signer.getAddress = async () => {
                 return address
             }
         }
@@ -17,6 +17,10 @@ export async function deriveApiKey(address: string, signer: any): Promise<ApiKey
         const headers = await createL1Headers(address, signer, chainId,);
 
         const apiKeyRaw = await myGet(endpoint, { headers })
+        if (!apiKeyRaw || !apiKeyRaw.apiKey || !apiKeyRaw.secret || !apiKeyRaw.passphrase) {
+            throw new Error(`fetch api key error fail, apiKeyRaw: ${JSON.stringify(apiKeyRaw)}`);
+        }
+
         const apiKey: ApiKeyCreds = {
             key: apiKeyRaw.apiKey,
             secret: apiKeyRaw.secret,
@@ -67,17 +71,22 @@ async function buildClobEip712Signature(address: string, signer: any,
         nonce,
         message: MSG_TO_SIGN,
     };
-    // eslint-disable-next-line no-underscore-dangle
-    let sig: any
 
-    if (signer.signTypedData.length == 3) {
-        sig = await signer.signTypedData(domain, types, value);
-    } else {
-        sig = await signer.signTypedData({ account: address, domain, types, 
-            message: value, primaryType:'ClobAuth' });
+    try {
+        let sig: any
+        if (signer.signTypedData.length == 3) {
+            sig = await signer.signTypedData(domain, types, value);
+        } else {
+            sig = await signer.signTypedData({
+                account: address, domain, types,
+                message: value, primaryType: 'ClobAuth'
+            });
+        }
+
+        return sig;
+    } catch (error) {
+        throw new Error(`buildClobEip712Signature error: ${error}`);
     }
-
-    return sig;
 };
 
 async function myGet(endpoint: string, options?: RequestOptions) {
