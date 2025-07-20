@@ -1,11 +1,10 @@
 import { ApiKeyCreds, Chain, L1PolyHeader } from "@polymarket/clob-client";
-import { get, RequestOptions } from '@polymarket/clob-client/dist/http-helpers'
+import { get, post, RequestOptions } from '@polymarket/clob-client/dist/http-helpers'
 import { polymarketClobUrl, chainId } from './const';
 
-const DERIVE_API_KEY = "/auth/derive-api-key";
-export const MSG_TO_SIGN = "This message attests that I control the given wallet";
-
 export async function deriveApiKey(address: string, signer: any): Promise<ApiKeyCreds> {
+    const DERIVE_API_KEY = "/auth/derive-api-key";
+
     try {
         const endpoint = `${polymarketClobUrl}${DERIVE_API_KEY}`;
         if (!signer.getAddress) {
@@ -16,9 +15,14 @@ export async function deriveApiKey(address: string, signer: any): Promise<ApiKey
 
         const headers = await createL1Headers(address, signer, chainId,);
 
-        const apiKeyRaw = await myGet(endpoint, { headers })
+        let apiKeyRaw = await myGet(endpoint, { headers })
         if (!apiKeyRaw || !apiKeyRaw.apiKey || !apiKeyRaw.secret || !apiKeyRaw.passphrase) {
-            throw new Error(`fetch api key error fail, apiKeyRaw: ${JSON.stringify(apiKeyRaw)}`);
+
+            const apiKey = await createApiKey(address, signer)
+            if (!apiKey) {
+                throw new Error(`fetch api key failed, response: ${JSON.stringify(apiKey)}`);
+            }
+            return apiKey
         }
 
         const apiKey: ApiKeyCreds = {
@@ -27,6 +31,7 @@ export async function deriveApiKey(address: string, signer: any): Promise<ApiKey
             passphrase: apiKeyRaw.passphrase,
         };
         return apiKey;
+
     } catch (error) {
         throw new Error(`deriveApiKey error: ${error}, signTypedData length: ${signer.signTypedData?.length}`);
     }
@@ -49,6 +54,7 @@ async function createL1Headers(address: string, signer: any, chainId: Chain,): P
 
 async function buildClobEip712Signature(address: string, signer: any,
     chainId: Chain, timestamp: number, nonce: number): Promise<string> {
+    const MSG_TO_SIGN = "This message attests that I control the given wallet";
     const ts = `${timestamp}`;
 
     const domain = {
@@ -94,4 +100,38 @@ async function myGet(endpoint: string, options?: RequestOptions) {
         ...options,
         params: { ...options?.params, },
     });
+}
+
+async function myPost(endpoint: string, options?: RequestOptions) {
+    return post(endpoint, {
+        ...options,
+        params: { ...options?.params, },
+    });
+}
+
+async function createApiKey(address: string, signer: any): Promise<ApiKeyCreds> {
+    const CREATE_API_KEY = "/auth/api-key";
+
+    const endpoint = `${polymarketClobUrl}${CREATE_API_KEY}`;
+    if (!signer.getAddress) {
+        signer.getAddress = async () => {
+            return address
+        }
+    }
+
+    const headers = await createL1Headers(address, signer, chainId,);
+
+    const apiKeyRaw = await myPost(endpoint, { headers })
+    if (!apiKeyRaw || !apiKeyRaw.apiKey || !apiKeyRaw.secret || !apiKeyRaw.passphrase) {
+        throw new Error(`create api key failed, apiKeyRaw: ${JSON.stringify(apiKeyRaw)}`);
+    }
+
+    const apiKey: ApiKeyCreds = {
+        key: apiKeyRaw.apiKey,
+        secret: apiKeyRaw.secret,
+        passphrase: apiKeyRaw.passphrase,
+    };
+
+    return apiKey;
+
 }
