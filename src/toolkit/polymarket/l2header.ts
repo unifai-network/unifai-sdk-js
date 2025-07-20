@@ -66,8 +66,7 @@ export const buildPolyHmacSignature = (
         throw new Error(`buildPolyHmacSignature, secret is empty`);
     }
 
-    const secret2 = secret.replace(/_/g, '/')
-    const base64Secret = base64ToBuffer(secret2)
+    const base64Secret = base64ToBuffer(secret)
 
     const hmac = crypto.createHmac("sha256", base64Secret);
     const sig = hmac.update(message).digest("base64");
@@ -84,7 +83,19 @@ function replaceAll(s: string, search: string, replace: string) {
 }
 
 function base64ToBuffer(base64: string): Uint8Array {
-    const binaryString = atob(base64);
+    let binaryString
+    try {
+        // Replace URL-safe chars
+        let str = base64.replace(/-/g, '+').replace(/_/g, '/');
+        while (str.length % 4 !== 0) {
+            str += '=';
+        }
+
+        binaryString = atob(str);
+    } catch (e) {
+        throw new Error(`base64ToBuffer, base64 str: ${base64}, error: ${e}`);
+    }
+    
     const len = binaryString.length;
     const bytes = new Uint8Array(len);
 
