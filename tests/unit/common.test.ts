@@ -93,11 +93,14 @@ describe("API Class", () => {
 
     it("should handle request failure", async () => {
       const errorResponse = { message: "Not Found" };
-      (global.fetch as jest.Mock).mockResolvedValueOnce({
+      const mockResponse = {
         ok: false,
         status: 404,
         json: () => Promise.resolve(errorResponse),
-      });
+        clone: () => mockResponse,
+        text: () => Promise.resolve("Not Found"),
+      };
+      (global.fetch as jest.Mock).mockResolvedValueOnce(mockResponse);
 
       await expect(api.request("GET", "/test")).rejects.toThrow(APIError);
     });
