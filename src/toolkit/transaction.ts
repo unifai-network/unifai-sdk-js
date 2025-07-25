@@ -51,8 +51,8 @@ export class TransactionAPI extends API {
 
     public async getTransaction(txId: string) {
         let data = await this.request('GET', `/tx/get/${txId}`);
-        if (!data.success) {
-            throw data.error
+        if (data.error) {
+            throw new Error(data.error)
         }
         return data
     }
