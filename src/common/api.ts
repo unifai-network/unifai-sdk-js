@@ -77,10 +77,11 @@ export class API {
         return await response.json();
       } else {
         let errorData;
+        const clonedResponse = response.clone(); 
         try {
           errorData = await response.json();
         } catch {
-          errorData = { detail: await response.text() };
+          errorData = { detail: await clonedResponse.text() };
         }
         
         throw new APIError(response.status, errorData);
