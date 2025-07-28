@@ -183,9 +183,14 @@ export class TransactionAPI extends API {
                         }
                     }
                 } else if (isEtherSigner(signer)) {
-                    receipt = await txResponse.wait()
-                    if (!receipt || receipt.status == 0) {
-                        throw new Error('transaction reverted')
+                    if (typeof txResponse.wait === 'function') {
+                        receipt = await txResponse.wait()
+                        if (!receipt || receipt.status == 0) {
+                            throw new Error('transaction reverted')
+                        }
+                    } else {
+                        console.log('txResponse: ', txResponse);
+                        throw new Error('Transaction response does not have wait method');
                     }
                 }
 
