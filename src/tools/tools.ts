@@ -48,6 +48,10 @@ export const functionList: Function[] = [
         limit: {
           type: 'number',
           description: 'The maximum number of tools to return, must be between 1 and 100, default is 10, recommend at least 10'
+        },
+        unverified: {
+          type: 'boolean',
+          description: 'Whether to include unverified tools in search results, default is false'
         }
       },
       required: ['query'],
@@ -113,11 +117,13 @@ export class Tools {
    * 
    * @param staticToolkits - List of toolkit IDs to include
    * @param staticActions - List of action IDs to include
+   * @param unverified - Whether to include unverified tools in search results
    * @returns List of Tool objects
    */
   private async fetchStaticTools(
     staticToolkits: string[] | null = null,
     staticActions: string[] | null = null,
+    unverified: boolean = false,
   ): Promise<Tool[]> {
     const staticTools: Tool[] = [];
 
@@ -131,6 +137,10 @@ export class Tools {
         
         if (staticActions?.length) {
           args.includeActions = staticActions;
+        }
+        
+        if (unverified) {
+          args.unverified = true;
         }
         
         const actions = await this.api.searchTools(args);
@@ -194,6 +204,7 @@ export class Tools {
    * @param options.staticToolkits - List of static toolkit IDs to include
    * @param options.staticActions - List of static action IDs to include 
    * @param options.cacheControl - Whether to include cache control
+   * @param options.unverified - Whether to include unverified tools in search results
    * @returns List of tools in OpenAI API compatible format
    */
   public async getTools(
@@ -202,6 +213,7 @@ export class Tools {
       staticToolkits?: string[] | null;
       staticActions?: string[] | null;
       cacheControl?: boolean;
+      unverified?: boolean;
     } = {}
   ): Promise<any[]> {
     const { 
@@ -209,6 +221,7 @@ export class Tools {
       staticToolkits = null, 
       staticActions = null,
       cacheControl = false,
+      unverified = false,
     } = options;
 
     const tools: any[] = [];
@@ -218,7 +231,7 @@ export class Tools {
     }
 
     if (staticToolkits?.length || staticActions?.length) {
-      const staticTools = await this.fetchStaticTools(staticToolkits, staticActions);
+      const staticTools = await this.fetchStaticTools(staticToolkits, staticActions, unverified);
       tools.push(...staticTools);
     }
     

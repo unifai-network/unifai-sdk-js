@@ -19,6 +19,7 @@ const API_KEY = process.env.UNIFAI_AGENT_API_KEY || "";
 const DYNAMIC_TOOLS = process.env.UNIFAI_DYNAMIC_TOOLS !== "false"; // Default to true
 const STATIC_TOOLKITS = process.env.UNIFAI_STATIC_TOOLKITS ? process.env.UNIFAI_STATIC_TOOLKITS.split(",").map(id => id.trim()) : null;
 const STATIC_ACTIONS = process.env.UNIFAI_STATIC_ACTIONS ? process.env.UNIFAI_STATIC_ACTIONS.split(",").map(id => id.trim()) : null;
+const UNVERIFIED_TOOLS = process.env.UNIFAI_UNVERIFIED_TOOLS === "true"; // Default to false
 
 const server = new Server(
   {
@@ -39,6 +40,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
     dynamicTools: DYNAMIC_TOOLS,
     staticToolkits: STATIC_TOOLKITS,
     staticActions: STATIC_ACTIONS,
+    unverified: UNVERIFIED_TOOLS,
   });
   
   toolList = toolList.map((tool: any) => ({
