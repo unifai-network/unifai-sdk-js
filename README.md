@@ -80,6 +80,19 @@ const combinedTools = await tools.getTools({
 });
 ```
 
+#### Unverified Tools
+
+By default, only verified tools are returned in dynamic tool search results. You can include unverified tools by setting the `unverified` option:
+
+```typescript
+const toolsIncludingUnverified = await tools.getTools({
+  dynamicTools: true,
+  unverified: true
+});
+```
+
+Note: This option only affects dynamic tools. Static tools (specified via `staticToolkits` or `staticActions`) will always be returned regardless of the `unverified` setting.
+
 ### Passing Tools to LLMs
 
 You can pass the tools to any OpenAI compatible API. Popular options include:
@@ -167,7 +180,8 @@ You can use environment variable to choose dynamic/static tools exposed by the M
         "UNIFAI_AGENT_API_KEY": "",
         "UNIFAI_DYNAMIC_TOOLS": "true",
         "UNIFAI_STATIC_TOOLKITS": "1,2,3",
-        "UNIFAI_STATIC_ACTIONS": "ACTION_A,ACTION_B"
+        "UNIFAI_STATIC_ACTIONS": "ACTION_A,ACTION_B",
+        "UNIFAI_UNVERIFIED_TOOLS": "false"
       }
     }
   }
