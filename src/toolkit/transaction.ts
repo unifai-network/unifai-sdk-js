@@ -85,7 +85,8 @@ export class TransactionAPI extends API {
         let hashes: string[] = [];
 
         try {
-            for (const tx of transactions) {
+            for (let i = 0; i < transactions.length; i++) {
+                const tx = transactions[i];
                 switch (tx.chain) {
                     case 'polygon': // Polygon Mainnet
                         switch (tx.name) {
@@ -112,8 +113,12 @@ export class TransactionAPI extends API {
                 if (res.hash) {
                     hashes.push(res.hash);
                 }
-                const interval = config?.txInterval || 2;
-                await new Promise(resolve => setTimeout(resolve, 1000 * interval));
+                
+                // Only sleep if it's not the last transaction
+                if (i < transactions.length - 1) {
+                    const interval = config?.txInterval || 2;
+                    await new Promise(resolve => setTimeout(resolve, 1000 * interval));
+                }
             }
 
             if (hashes.length > 0) { // complete the transactions by last hash
