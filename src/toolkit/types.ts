@@ -3,6 +3,7 @@ export interface SendConfig {
     rpcUrls?: string[], // rpc urls to send transactions
     proxyUrl?: string   // proxy server to forward transaction
     txData?: any        // transaction data to send
+    txInterval?: number // interval(seconds) to between transactions
 }
 
 export type Signer = EtherSigner | WagmiSigner | SolanaSigner;
