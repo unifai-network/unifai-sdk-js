@@ -70,7 +70,8 @@ export class TransactionAPI extends API {
     }
 
     // Sign and Sends a transaction to blockchains.
-    public async signAndSendTransaction(txId: string, signer: Signer, config?: SendConfig): Promise<{ hash?: string[] }> {
+    public async signAndSendTransaction(txId: string, signer: Signer, config?: SendConfig): 
+        Promise<{ hash?: string[], error?: any }> {
         let address = await this.getAddress(signer);
 
         let data = config?.txData || await this.buildTransaction(txId, signer);
@@ -111,6 +112,8 @@ export class TransactionAPI extends API {
                 if (res.hash) {
                     hashes.push(res.hash);
                 }
+                const interval = config?.txInterval || 2;
+                await new Promise(resolve => setTimeout(resolve, 1000 * interval));
             }
 
             if (hashes.length > 0) { // complete the transactions by last hash
@@ -119,7 +122,11 @@ export class TransactionAPI extends API {
 
             return { hash: hashes };
         } catch (error: any) {
-            throw new Error(error);
+            if (hashes.length > 0) {
+                return { hash: hashes, error }; 
+            } else {
+                throw new Error(error);
+            }
         }
     }
 
