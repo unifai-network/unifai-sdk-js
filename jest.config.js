@@ -7,6 +7,6 @@ module.exports = {
     "^.+\\.tsx?$": "ts-jest",
   },
   moduleFileExtensions: ["ts", "tsx", "js", "jsx", "json", "node"],
-  roots: ["<rootDir>/src", "<rootDir>/tests"],
+  roots: ["<rootDir>/src"],
   testMatch: ["**/__tests__/**/*.[jt]s?(x)", "**/?(*.)+(spec|test).[tj]s?(x)"],
 };
