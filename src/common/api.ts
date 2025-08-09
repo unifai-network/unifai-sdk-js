@@ -1,3 +1,5 @@
+const urljoin = require('url-join');
+
 export interface APIConfig {
   apiKey?: string;
   endpoint?: string;
@@ -49,7 +51,32 @@ export class API {
     const timeoutId = setTimeout(() => controller.abort(), timeout);
 
     // Construct the URL with query parameters
-    const url = new URL(`${this.apiUri}${path}`);
+    let fullUrl: string;
+    
+    // Check if apiUri is relative and we're in Node.js
+    if (!this.apiUri.match(/^(https?:\/\/|\/\/)/i)) {
+      const origin = (typeof window !== 'undefined' && window.location?.origin) || 
+                     (typeof self !== 'undefined' && self.location?.origin);
+      
+      if (!origin) {
+        throw new Error('Relative API URL not supported in Node.js environment');
+      }
+      
+      fullUrl = urljoin(origin, this.apiUri, path);
+    } else {
+      fullUrl = urljoin(this.apiUri, path);
+    }
+    
+    // Handle protocol-relative URLs by detecting current protocol or defaulting to https
+    let url: URL;
+    if (fullUrl.startsWith('//')) {
+      const protocol = (typeof window !== 'undefined' && window.location?.protocol) || 
+                       (typeof self !== 'undefined' && self.location?.protocol) || 
+                       'https:';
+      url = new URL(protocol + fullUrl);
+    } else {
+      url = new URL(fullUrl);
+    }
     if (params) {
       Object.keys(params).forEach(key => {
         if (Array.isArray(params[key])) {
