@@ -27,13 +27,13 @@ export class TransactionAPI extends API {
             type,
             payload,
         }
-        return await this.request('POST', `/tx/create`, { json: data });
+        return await this.request('POST', `/tx/create`, { json: data, timeout: 30000 });
     }
 
     public async buildTransaction(txId: string, signerOrAddress: Signer | string) {
         let address = typeof signerOrAddress === 'string' ? signerOrAddress : await this.getAddress(signerOrAddress);
         let buildBody = { txId, address };
-        let data = await this.request('POST', `/tx/build`, { json: buildBody });
+        let data = await this.request('POST', `/tx/build`, { json: buildBody, timeout: 30000 });
         if (!data.success) {
             throw data.error
         }
@@ -83,63 +83,92 @@ export class TransactionAPI extends API {
 
         let res;
         let hashes: string[] = [];
+        let successful: Array<{index: number, hash: string}> = [];
+        let failed: Array<{index: number, error: string}> = [];
+        
+        // Determine onFailure behavior with priority: config.onFailure > data.onFailure > default (stop)
+        const onFailure = config?.onFailure || data.onFailure || 'stop';
 
-        try {
-            for (let i = 0; i < transactions.length; i++) {
-                const tx = transactions[i];
-                try {
-                    switch (tx.chain) {
-                        case 'polygon': // Polygon Mainnet
-                            switch (tx.name) {
-                                case 'MarketOrder':
-                                    let conf: SendConfig = config || {}
-                                    if (!config || !config.proxyUrl) { // if not set, then use apiUri, it's transaction builder.
-                                        conf.proxyUrl = this.apiUri
-                                    }
-                                    res = await this.polymarketSendTransaction(signer as EtherSigner | WagmiSigner,
-                                        tx, conf, address);
-                                    break;
-                                default:
-                                    res = await this.evmSendTransaction(signer as EtherSigner | WagmiSigner, tx);
-                            }
-                            break;
-                        case 'solana': // Solana
-                            res = await this.solSendTransaction(signer as SolanaSigner, tx, config);
-                            break;
+        for (let i = 0; i < transactions.length; i++) {
+            const tx = transactions[i];
+            try {
+                switch (tx.chain) {
+                    case 'polygon': // Polygon Mainnet
+                        switch (tx.name) {
+                            case 'MarketOrder':
+                                let conf: SendConfig = config || {}
+                                if (!config || !config.proxyUrl) { // if not set, then use apiUri, it's transaction builder.
+                                    conf.proxyUrl = this.apiUri
+                                }
+                                res = await this.polymarketSendTransaction(signer as EtherSigner | WagmiSigner,
+                                    tx, conf, address);
+                                break;
+                            default:
+                                res = await this.evmSendTransaction(signer as EtherSigner | WagmiSigner, tx);
+                        }
+                        break;
+                    case 'solana': // Solana
+                        res = await this.solSendTransaction(signer as SolanaSigner, tx, config);
+                        break;
 
-                        default: // evm
-                            res = await this.evmSendTransaction(signer as EtherSigner | WagmiSigner, tx);
-                    }
+                    default: // evm
+                        res = await this.evmSendTransaction(signer as EtherSigner | WagmiSigner, tx);
+                }
 
-                    if (res.hash) {
-                        hashes.push(res.hash);
-                    }
+                if (res.hash) {
+                    hashes.push(res.hash);
+                    successful.push({ index: i, hash: res.hash });
+                }
 
-                    // Only sleep if it's not the last transaction
-                    if (i < transactions.length - 1) {
-                        const interval = config?.txInterval || 2;
-                        await new Promise(resolve => setTimeout(resolve, 1000 * interval));
-                    }
-                } catch (error: any) {
-                    if (config?.onFailure == 'skip' || data.onFailure == 'skip') { // if a transaction fails, skip the failure and continue
-                        continue;
-                    } else {
-                        throw error;
-                    }
+                // Only sleep if it's not the last transaction
+                if (i < transactions.length - 1) {
+                    const interval = config?.txInterval || 2;
+                    await new Promise(resolve => setTimeout(resolve, 1000 * interval));
+                }
+            } catch (error: any) {
+                const errorMessage = error.message || error.toString();
+                failed.push({ index: i, error: errorMessage });
+                
+                if (onFailure === 'skip') {
+                    // Continue with next transaction
+                    continue;
+                } else {
+                    // Stop mode: throw error with details
+                    const successfulIndices = successful.map(s => s.index+1);
+                    const successfulHashes = successful.map(s => s.hash);
+                    const errorDetails = `Transaction ${i+1} failed: ${errorMessage}`;
+                    const fullError = successfulHashes.length > 0 
+                        ? `${errorDetails}. Transaction ${successfulIndices.join(', ')} are successful: [${successfulHashes.join(', ')}]`
+                        : errorDetails;
+                    throw new Error(`signAndSendTransaction: ${fullError}`);
                 }
             }
+        }
 
-            if (hashes.length > 0) { // complete the transactions by last hash
+        // Handle completion and return logic
+        if (hashes.length > 0) {
+            try {
                 await this.completeTransaction(txId, hashes[hashes.length - 1], address);
+            } catch (error: any) {
+                console.error(`completeTransaction failed: ${error}`);
             }
+        }
 
-            return { hash: hashes };
-        } catch (error: any) {
-            if (hashes.length > 0) {
-                return { hash: hashes, error };
-            } else {
-                throw error;
+        if (onFailure === 'skip') {
+            const failedDetails = failed.map(f => `Transaction ${f.index+1}: ${f.error}`).join('; ');
+            // For skip mode, check if all transactions failed
+            if (failed.length === transactions.length) {
+                throw new Error(`All transactions failed: ${failedDetails}`);
             }
+            // Return with error info if there were any failures
+            if (failed.length > 0) {
+                const errorInfo = `Some transactions failed: ${failedDetails}.`;
+                return { hash: hashes, error: errorInfo };
+            }
+            return { hash: hashes };
+        } else {
+            // For stop mode, we only reach here if all transactions succeeded
+            return { hash: hashes };
         }
     }
 
