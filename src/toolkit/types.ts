@@ -5,6 +5,10 @@ export interface SendConfig {
     txData?: any        // transaction data to send
     txInterval?: number // interval(seconds) to between transactions
     onFailure?: 'skip' | 'stop' // skip: skip a failure transaction and continue, stop: stop the failure transaction and throw an error
+    useJito?: boolean // enable/disable jito for solana transactions
+    jitoEndpoint?: string // jito block engine endpoint
+    jitoApiKey?: string // jito api key
+    jitoTipAmount?: number // jito tip amount in lamports
 }
 
 export type Signer = EtherSigner | WagmiSigner | SolanaSigner;
@@ -28,7 +32,7 @@ export interface WagmiSigner {
 export interface SolanaSigner {
     publicKey: { toBase58: () => string }; // solana provider
 
-    signTransaction?: (tx: any) => Promise<any>;
+    signTransaction: (tx: any) => Promise<any>;
 }
 
 export function isEtherSigner(signer: any): boolean {
