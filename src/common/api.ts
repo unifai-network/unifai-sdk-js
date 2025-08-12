@@ -1,4 +1,4 @@
-const urljoin = require('url-join');
+import urljoin from 'url-join';
 
 export interface APIConfig {
   apiKey?: string;
