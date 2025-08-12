@@ -70,7 +70,7 @@ export class TransactionAPI extends API {
     }
 
     // Sign and Sends a transaction to blockchains.
-    public async signAndSendTransaction(txId: string, signer: Signer, config?: SendConfig): 
+    public async signAndSendTransaction(txId: string, signer: Signer, config?: SendConfig):
         Promise<{ hash?: string[], error?: any }> {
         let address = await this.getAddress(signer);
 
@@ -87,37 +87,45 @@ export class TransactionAPI extends API {
         try {
             for (let i = 0; i < transactions.length; i++) {
                 const tx = transactions[i];
-                switch (tx.chain) {
-                    case 'polygon': // Polygon Mainnet
-                        switch (tx.name) {
-                            case 'MarketOrder':
-                                let conf: SendConfig = config || {}
-                                if (!config || !config.proxyUrl) { // if not set, then use apiUri, it's transaction builder.
-                                    conf.proxyUrl = this.apiUri
-                                }
-                                res = await this.polymarketSendTransaction(signer as EtherSigner | WagmiSigner,
-                                    tx, conf, address);
-                                break;
-                            default:
-                                res = await this.evmSendTransaction(signer as EtherSigner | WagmiSigner, tx);
-                        }
-                        break;
-                    case 'solana': // Solana
-                        res = await this.solSendTransaction(signer as SolanaSigner, tx, config);
-                        break;
+                try {
+                    switch (tx.chain) {
+                        case 'polygon': // Polygon Mainnet
+                            switch (tx.name) {
+                                case 'MarketOrder':
+                                    let conf: SendConfig = config || {}
+                                    if (!config || !config.proxyUrl) { // if not set, then use apiUri, it's transaction builder.
+                                        conf.proxyUrl = this.apiUri
+                                    }
+                                    res = await this.polymarketSendTransaction(signer as EtherSigner | WagmiSigner,
+                                        tx, conf, address);
+                                    break;
+                                default:
+                                    res = await this.evmSendTransaction(signer as EtherSigner | WagmiSigner, tx);
+                            }
+                            break;
+                        case 'solana': // Solana
+                            res = await this.solSendTransaction(signer as SolanaSigner, tx, config);
+                            break;
 
-                    default: // evm
-                        res = await this.evmSendTransaction(signer as EtherSigner | WagmiSigner, tx);
-                }
+                        default: // evm
+                            res = await this.evmSendTransaction(signer as EtherSigner | WagmiSigner, tx);
+                    }
 
-                if (res.hash) {
-                    hashes.push(res.hash);
-                }
-                
-                // Only sleep if it's not the last transaction
-                if (i < transactions.length - 1) {
-                    const interval = config?.txInterval || 2;
-                    await new Promise(resolve => setTimeout(resolve, 1000 * interval));
+                    if (res.hash) {
+                        hashes.push(res.hash);
+                    }
+
+                    // Only sleep if it's not the last transaction
+                    if (i < transactions.length - 1) {
+                        const interval = config?.txInterval || 2;
+                        await new Promise(resolve => setTimeout(resolve, 1000 * interval));
+                    }
+                } catch (error: any) {
+                    if (config?.onFailure == 'skip' || data.onFailure == 'skip') { // if a transaction fails, skip the failure and continue
+                        continue;
+                    } else {
+                        throw error;
+                    }
                 }
             }
 
@@ -128,9 +136,9 @@ export class TransactionAPI extends API {
             return { hash: hashes };
         } catch (error: any) {
             if (hashes.length > 0) {
-                return { hash: hashes, error }; 
+                return { hash: hashes, error };
             } else {
-                throw new Error(error);
+                throw error;
             }
         }
     }
