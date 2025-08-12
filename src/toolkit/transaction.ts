@@ -10,6 +10,7 @@ import { JsonRpcSigner } from "@ethersproject/providers";
 import { Wallet } from "@ethersproject/wallet";
 import { deriveApiKey } from "./polymarket/apikey"
 import { createL2Headers } from "./polymarket/l2header"
+import { createJitoClient, shouldUseJito, JitoConfig, JITO_CONSTANTS } from './jito';
 
 export class TransactionAPI extends API {
     constructor(config: APIConfig) {
@@ -79,6 +80,16 @@ export class TransactionAPI extends API {
         const transactions = data.transactions
         if (!transactions || transactions.length === 0) {
             throw new Error('No transactions to send.')
+        }
+
+        const jitoDecision = shouldUseJito(transactions, config?.useJito, data.useJito);
+
+        if (jitoDecision.useJito) {
+            // Determine onFailure behavior for Jito transactions
+            const onFailure = config?.onFailure || data.onFailure || 'stop';
+            
+            // Send via Jito (completion handled inside)
+            return await this.sendJitoTransactions(txId, transactions, signer as SolanaSigner, config, onFailure);
         }
 
         let res;
@@ -169,6 +180,133 @@ export class TransactionAPI extends API {
         } else {
             // For stop mode, we only reach here if all transactions succeeded
             return { hash: hashes };
+        }
+    }
+
+    private async sendJitoTransactions(
+        txId: string,
+        transactions: any[],
+        signer: SolanaSigner,
+        config: SendConfig | undefined,
+        onFailure: 'skip' | 'stop' = 'stop'
+    ): Promise<{ hash: string[], error?: string }> {
+        // Validate all transactions are Solana
+        const allSolana = transactions.every(tx => tx.chain === 'solana');
+        if (!allSolana) {
+            throw new Error('Jito can only be used with Solana transactions');
+        }
+
+        // Create Jito client with configuration
+        const jitoConfig: JitoConfig = {
+            jitoEndpoint: config?.jitoEndpoint,
+            apiKey: config?.jitoApiKey,
+            tipAmount: config?.jitoTipAmount,
+        };
+        
+        const jitoClient = createJitoClient(jitoConfig);
+        
+        if (transactions.length === 1) {
+            // Single transaction case
+            try {
+                const result = await jitoClient.sendSingleTransaction(transactions[0], signer, config?.rpcUrls);
+                
+                // Complete the transaction
+                if (result.hash.length > 0) {
+                    const address = await this.getAddress(signer);
+                    try {
+                        await this.completeTransaction(txId, result.hash[0], address);
+                    } catch (error: any) {
+                        console.error(`completeTransaction failed: ${error}`);
+                    }
+                }
+                
+                return { hash: result.hash };
+            } catch (error: any) {
+                throw new Error(`Jito single transaction failed: ${error.message || error}`);
+            }
+        }
+
+        // Bundle case - handle batching with failure tracking
+        const allHashes: string[] = [];
+        let successful: Array<{batchIndex: number, hashes: string[]}> = [];
+        let failed: Array<{batchIndex: number, error: string, txCount: number}> = [];
+        
+        // Split into batches if needed
+        const batches: any[][] = [];
+        if (transactions.length <= JITO_CONSTANTS.MAX_BUNDLE_SIZE) {
+            batches.push(transactions);
+        } else {
+            for (let i = 0; i < transactions.length; i += JITO_CONSTANTS.MAX_BUNDLE_SIZE) {
+                batches.push(transactions.slice(i, i + JITO_CONSTANTS.MAX_BUNDLE_SIZE));
+            }
+        }
+
+        // Send each batch
+        for (let i = 0; i < batches.length; i++) {
+            const batch = batches[i];
+            try {
+                const result = await jitoClient.sendBundle(batch, signer, config?.rpcUrls);
+                allHashes.push(...result.hash);
+                successful.push({ batchIndex: i, hashes: result.hash });
+
+                // Add interval between batches (except for the last one)
+                if (i < batches.length - 1) {
+                    const interval = config?.txInterval || 2;
+                    await new Promise(resolve => setTimeout(resolve, 1000 * interval));
+                }
+            } catch (error: any) {
+                const errorMessage = error.message || error.toString();
+                failed.push({ batchIndex: i, error: errorMessage, txCount: batch.length });
+                
+                if (onFailure === 'skip') {
+                    // Continue with next batch
+                    continue;
+                } else {
+                    // Stop mode: throw error with details
+                    const successfulInfo = successful.length > 0 
+                        ? `Successful batches: ${successful.map(s => `batch ${s.batchIndex + 1} (${s.hashes.length} txns: ${s.hashes.join(', ')})`).join('; ')}`
+                        : '';
+                    
+                    const errorDetails = `Batch ${i + 1}/${batches.length} (${batch.length} transactions) failed: ${errorMessage}`;
+                    const fullError = successfulInfo 
+                        ? `${errorDetails}. ${successfulInfo}`
+                        : errorDetails;
+                    
+                    throw new Error(`Jito bundle processing failed: ${fullError}`);
+                }
+            }
+        }
+
+        // Handle completion and results based on onFailure mode
+        if (allHashes.length > 0) {
+            const address = await this.getAddress(signer);
+            const lastHash = allHashes[allHashes.length - 1];
+            try {
+                await this.completeTransaction(txId, lastHash, address);
+            } catch (error: any) {
+                console.error(`completeTransaction failed: ${error}`);
+            }
+        }
+
+        if (onFailure === 'skip') {
+            // Check if all batches failed
+            if (failed.length === batches.length) {
+                const failedDetails = failed.map(f => `Batch ${f.batchIndex + 1} (${f.txCount} txns): ${f.error}`).join('; ');
+                throw new Error(`All Jito batches failed: ${failedDetails}`);
+            }
+            
+            // Return with error info if there were any failures
+            if (failed.length > 0) {
+                const failedDetails = failed.map(f => `Batch ${f.batchIndex + 1} (${f.txCount} txns): ${f.error}`).join('; ');
+                const successfulDetails = successful.map(s => `Batch ${s.batchIndex + 1}: ${s.hashes.length} txns`).join(', ');
+                const errorInfo = `Some batches failed: ${failedDetails}. Successful: ${successfulDetails}`;
+                return { hash: allHashes, error: errorInfo };
+            }
+            
+            return { hash: allHashes };
+        } else {
+            // For stop mode, we only reach here if all batches succeeded
+            return { hash: allHashes };
         }
     }
 
@@ -268,12 +406,7 @@ export class TransactionAPI extends API {
                 transaction = web3.VersionedTransaction.deserialize(transactionBuffer);
             }
 
-            let signedTransaction: any;
-            if (signer.signTransaction) {
-                signedTransaction = await signer.signTransaction(transaction);
-            } else {
-                throw new Error('Signer should have signTransaction method for Solana.');
-            }
+            const signedTransaction = await signer.signTransaction(transaction);
 
             const serializedTransaction = Buffer.from(signedTransaction.serialize());
 
@@ -282,9 +415,10 @@ export class TransactionAPI extends API {
             let signature: string | null = null;
             const successfulTransactions: { type: string; hash: string }[] = [];
 
-            if (!config || !config.rpcUrls || config.rpcUrls.length === 0) {
+            let rpcUrls = config?.rpcUrls && config.rpcUrls.length > 0 ? config.rpcUrls : [web3.clusterApiUrl('mainnet-beta')];
+            for (const rpcUrl of rpcUrls) {
                 try {
-                    connection = new web3.Connection(web3.clusterApiUrl('mainnet-beta'), 'confirmed');
+                    connection = new web3.Connection(rpcUrl, 'confirmed');
                     signature = await connection.sendRawTransaction(serializedTransaction);
                     if (signature) {
                         successfulTransactions.push({
@@ -292,29 +426,12 @@ export class TransactionAPI extends API {
                             hash: signature,
                         });
                     }
+                    break;
 
                 } catch (error) {
-                    console.error(`Error sending transaction to clusterApiUrl('mainnet-beta'):`, error);
+                    console.error(`Error sending transaction to ${rpcUrl}:`, error);
                     lastError = error as Error;
-                }
-            } else {
-                for (const rpcUrl of config.rpcUrls) {
-                    try {
-                        connection = new web3.Connection(rpcUrl, 'confirmed');
-                        signature = await connection.sendRawTransaction(serializedTransaction);
-                        if (signature) {
-                            successfulTransactions.push({
-                                type: tx.type,
-                                hash: signature,
-                            });
-                        }
-                        break;
-
-                    } catch (error) {
-                        console.error(`Error sending transaction to ${rpcUrl}:`, error);
-                        lastError = error as Error;
-                        continue;
-                    }
+                    continue;
                 }
             }
 
