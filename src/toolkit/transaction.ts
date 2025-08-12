@@ -11,6 +11,7 @@ import { Wallet } from "@ethersproject/wallet";
 import { deriveApiKey } from "./polymarket/apikey"
 import { createL2Headers } from "./polymarket/l2header"
 import { createJitoClient, shouldUseJito, JitoConfig, JITO_CONSTANTS } from './jito';
+import { createQuickNodeJitoClient, QuickNodeJitoConfig } from './jito-quicknode';
 
 export class TransactionAPI extends API {
     constructor(config: APIConfig) {
@@ -196,14 +197,8 @@ export class TransactionAPI extends API {
             throw new Error('Jito can only be used with Solana transactions');
         }
 
-        // Create Jito client with configuration
-        const jitoConfig: JitoConfig = {
-            jitoEndpoint: config?.jitoEndpoint,
-            apiKey: config?.jitoApiKey,
-            tipAmount: config?.jitoTipAmount,
-        };
-        
-        const jitoClient = createJitoClient(jitoConfig);
+        // Create the appropriate Jito client based on provider
+        const jitoClient = this.createJitoClient(config);
         
         if (transactions.length === 1) {
             // Single transaction case
@@ -307,6 +302,24 @@ export class TransactionAPI extends API {
         } else {
             // For stop mode, we only reach here if all batches succeeded
             return { hash: allHashes };
+        }
+    }
+
+    private createJitoClient(config: SendConfig | undefined): any {
+        const jitoProvider = config?.jitoProvider || 'quicknode';
+        if (jitoProvider === 'jito') {
+            const jitoConfig: JitoConfig = {
+                jitoEndpoint: config?.jitoEndpoint,
+                apiKey: config?.jitoApiKey,
+                tipAmount: config?.jitoTipAmount,
+            };
+            return createJitoClient(jitoConfig);
+        } else {
+            const quickNodeConfig: QuickNodeJitoConfig = {
+                endpoint: config?.jitoEndpoint,
+                tipAmount: config?.jitoTipAmount,
+            };
+            return createQuickNodeJitoClient(quickNodeConfig);
         }
     }
 

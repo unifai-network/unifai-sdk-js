@@ -6,8 +6,9 @@ export interface SendConfig {
     txInterval?: number // interval(seconds) to between transactions
     onFailure?: 'skip' | 'stop' // skip: skip a failure transaction and continue, stop: stop the failure transaction and throw an error
     useJito?: boolean // enable/disable jito for solana transactions
-    jitoEndpoint?: string // jito block engine endpoint
-    jitoApiKey?: string // jito api key
+    jitoProvider?: 'jito' | 'quicknode' // jito provider: jito (original) or quicknode, defaults to quicknode
+    jitoEndpoint?: string // jito block engine endpoint (for original jito provider) or quicknode endpoint (for quicknode provider)
+    jitoApiKey?: string // jito api key (for original jito provider)
     jitoTipAmount?: number // jito tip amount in lamports
 }
 
