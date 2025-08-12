@@ -4,6 +4,7 @@ export interface SendConfig {
     proxyUrl?: string   // proxy server to forward transaction
     txData?: any        // transaction data to send
     txInterval?: number // interval(seconds) to between transactions
+    onFailure?: 'skip' | 'stop' // skip: skip a failure transaction and continue, stop: stop the failure transaction and throw an error
 }
 
 export type Signer = EtherSigner | WagmiSigner | SolanaSigner;
