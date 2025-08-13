@@ -10,8 +10,8 @@ import { JsonRpcSigner } from "@ethersproject/providers";
 import { Wallet } from "@ethersproject/wallet";
 import { deriveApiKey } from "./polymarket/apikey"
 import { createL2Headers } from "./polymarket/l2header"
-import { createJitoClient, shouldUseJito, JitoConfig, JITO_CONSTANTS } from './jito';
-import { createQuickNodeJitoClient, QuickNodeJitoConfig } from './jito-quicknode';
+import { createJitoClient, shouldUseJito, JitoConfig, JITO_CONSTANTS, JitoClient } from './jito';
+import { createQuickNodeJitoClient, QuickNodeJitoConfig, QuickNodeJitoClient } from './jito-quicknode';
 
 export class TransactionAPI extends API {
     constructor(config: APIConfig) {
@@ -86,11 +86,25 @@ export class TransactionAPI extends API {
         const jitoDecision = shouldUseJito(transactions, config?.useJito, data.useJito);
 
         if (jitoDecision.useJito) {
-            // Determine onFailure behavior for Jito transactions
-            const onFailure = config?.onFailure || data.onFailure || 'stop';
-            
-            // Send via Jito (completion handled inside)
-            return await this.sendJitoTransactions(txId, transactions, signer as SolanaSigner, config, onFailure);
+            let jitoClient: JitoClient | QuickNodeJitoClient | undefined;
+            try {
+                jitoClient = this.createJitoClient(config);
+            } catch (error: any) {
+                // explicitly set to use jito, should not fallback to non-jito
+                if (config?.useJito || data.useJito) {
+                    throw new Error(`failed to create jito client: ${error.message || error}`);
+                }
+            }
+
+            if (jitoClient) {
+                return await this.sendJitoTransactions(
+                    jitoClient,
+                    txId,
+                    transactions,
+                    signer as SolanaSigner,
+                    config, config?.onFailure || data.onFailure,
+                );
+            }
         }
 
         let res;
@@ -185,6 +199,7 @@ export class TransactionAPI extends API {
     }
 
     private async sendJitoTransactions(
+        jitoClient: JitoClient | QuickNodeJitoClient,
         txId: string,
         transactions: any[],
         signer: SolanaSigner,
@@ -197,9 +212,6 @@ export class TransactionAPI extends API {
             throw new Error('Jito can only be used with Solana transactions');
         }
 
-        // Create the appropriate Jito client based on provider
-        const jitoClient = this.createJitoClient(config);
-        
         if (transactions.length === 1) {
             // Single transaction case
             try {
@@ -305,7 +317,7 @@ export class TransactionAPI extends API {
         }
     }
 
-    private createJitoClient(config: SendConfig | undefined): any {
+    private createJitoClient(config: SendConfig | undefined): JitoClient | QuickNodeJitoClient {
         const jitoProvider = config?.jitoProvider || 'quicknode';
         if (jitoProvider === 'jito') {
             const jitoConfig: JitoConfig = {
@@ -315,8 +327,15 @@ export class TransactionAPI extends API {
             };
             return createJitoClient(jitoConfig);
         } else {
+            // For QuickNode: use jitoEndpoint if set, otherwise find QuickNode RPC from rpcUrls
+            let endpoint = config?.jitoEndpoint;
+            if (!endpoint && config?.rpcUrls?.length) {
+                // Try to find a QuickNode URL
+                endpoint = config.rpcUrls.find(url => url.includes('quiknode.pro'));
+            }
+            
             const quickNodeConfig: QuickNodeJitoConfig = {
-                endpoint: config?.jitoEndpoint,
+                endpoint: endpoint,
                 tipAmount: config?.jitoTipAmount,
             };
             return createQuickNodeJitoClient(quickNodeConfig);
