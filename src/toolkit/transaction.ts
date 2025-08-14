@@ -1,7 +1,7 @@
 import { API, APIConfig, TRANSACTION_API_ENDPOINT } from '../common';
 import { ActionContext } from './context';
 import { WagmiSigner, EtherSigner, SolanaSigner, SendConfig, isEtherSigner, isSolanaSigner, isWagmiSigner, Signer } from './types';
-import { ethers } from "ethers";
+import { ethers, toBeHex } from "ethers";
 import * as web3 from '@solana/web3.js';
 import { OrderType, ApiKeyCreds, } from "@polymarket/clob-client";
 import { SignedOrder } from "@polymarket/order-utils";
@@ -368,16 +368,15 @@ export class TransactionAPI extends API {
     private async evmSendTransaction(signer: EtherSigner | WagmiSigner, tx: any): Promise<{ hash: string | undefined }> {
         try {
             const unsignedTx = ethers.Transaction.from(tx.hex); // Validate the transaction format
-            const jsonTx = unsignedTx.toJSON();
 
             const txParams: any = {
-                to: unsignedTx.to ? jsonTx.to : ethers.ZeroAddress,
-                data: jsonTx.data,
+                to: unsignedTx.to ? unsignedTx.to : ethers.ZeroAddress,
             };
-            if (unsignedTx.value) { txParams.value = hexPrefix(jsonTx.value); }
-            if (unsignedTx.gasLimit) { txParams.gasLimit = hexPrefix(jsonTx.gasLimit); }
-            if (unsignedTx.maxFeePerGas) { txParams.maxFeePerGas = hexPrefix(jsonTx.maxFeePerGas); }
-            if (unsignedTx.maxPriorityFeePerGas) { txParams.maxPriorityFeePerGas = hexPrefix(jsonTx.maxPriorityFeePerGas); }
+            if (unsignedTx.data) { txParams.data = unsignedTx.data; }
+            if (unsignedTx.value) { txParams.value = toBeHex(unsignedTx.value); }
+            if (unsignedTx.gasLimit) { txParams.gasLimit = toBeHex(unsignedTx.gasLimit); }
+            if (unsignedTx.maxFeePerGas) { txParams.maxFeePerGas = toBeHex(unsignedTx.maxFeePerGas); }
+            if (unsignedTx.maxPriorityFeePerGas) { txParams.maxPriorityFeePerGas = toBeHex(unsignedTx.maxPriorityFeePerGas); }
             
             if (signer.sendTransaction) {
                 let txResponse: any;
@@ -590,8 +589,4 @@ export class TransactionAPI extends API {
         return res
     }
 
-}
-
-function hexPrefix(hex: string) {
-    return hex.startsWith('0x') ? hex : `0x${hex}`;
 }
