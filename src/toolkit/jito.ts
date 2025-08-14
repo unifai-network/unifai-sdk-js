@@ -48,7 +48,6 @@ export class JitoClient {
                 throw new Error(`Bundle size exceeds maximum of ${JITO_CONSTANTS.MAX_BUNDLE_SIZE} transactions`);
             }
 
-            const connection = this.getConnection(rpcUrls);
             const randomTipAccount = await this.client.getRandomTipAccount();
             const jitoTipAccount = new web3.PublicKey(randomTipAccount);
             
@@ -82,11 +81,6 @@ export class JitoClient {
                                 lamports: this.config.tipAmount!,
                             })
                         );
-
-                        // Update blockhash and fee payer
-                        const { blockhash } = await connection.getLatestBlockhash();
-                        transaction.recentBlockhash = blockhash;
-                        transaction.feePayer = signerPublicKey;
                     }
                     // For versioned transactions, we don't modify them as they're already built
                 }
@@ -161,11 +155,6 @@ export class JitoClient {
                         lamports: this.config.tipAmount!,
                     })
                 );
-
-                // Update blockhash and fee payer
-                const { blockhash } = await connection.getLatestBlockhash();
-                (tx as web3.Transaction).recentBlockhash = blockhash;
-                (tx as web3.Transaction).feePayer = signerPublicKey;
             } else {
                 tx = web3.VersionedTransaction.deserialize(transactionBuffer);
             }

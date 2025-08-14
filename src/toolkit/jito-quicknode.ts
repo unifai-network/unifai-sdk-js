@@ -97,12 +97,6 @@ export class QuickNodeJitoClient {
         return new QuickNodeJitoClient(fullConfig);
     }
 
-    private getConnection(rpcUrls?: string[]): web3.Connection {
-        if (rpcUrls && rpcUrls.length > 0) {
-            return new web3.Connection(rpcUrls[0], 'confirmed');
-        }
-        return this.connection;
-    }
 
     private async makeRpcCall(method: string, params: any[]): Promise<any> {
         const response = await fetch(this.config.endpoint!, {
@@ -209,7 +203,7 @@ export class QuickNodeJitoClient {
         throw new Error('Polling timeout reached without confirmation');
     }
 
-    async sendBundle(transactions: any[], signer: SolanaSigner, rpcUrls?: string[]): Promise<{ hash: string[] }> {
+    async sendBundle(transactions: any[], signer: SolanaSigner): Promise<{ hash: string[] }> {
         try {
             if (transactions.length === 0) {
                 throw new Error('No transactions to bundle');
@@ -219,8 +213,6 @@ export class QuickNodeJitoClient {
                 throw new Error(`Bundle size exceeds maximum of ${QUICKNODE_JITO_CONSTANTS.MAX_BUNDLE_SIZE} transactions`);
             }
 
-            const connection = this.getConnection(rpcUrls);
-            
             // Get a random tip account
             const jitoTipAccount = new web3.PublicKey(await this.getTipAccount());
             
@@ -254,11 +246,6 @@ export class QuickNodeJitoClient {
                                 lamports: this.config.tipAmount!,
                             })
                         );
-
-                        // Update blockhash and fee payer
-                        const { blockhash } = await connection.getLatestBlockhash();
-                        transaction.recentBlockhash = blockhash;
-                        transaction.feePayer = signerPublicKey;
                     }
                     // For versioned transactions, we don't modify them as they're already built
                 }
@@ -299,12 +286,12 @@ export class QuickNodeJitoClient {
             }
 
         } catch (error) {
-            throw new Error(`QuickNode Jito bundle send failed: ${error}`);
+            throw new Error(`Jito bundle send failed: ${error}`);
         }
     }
 
-    async sendSingleTransaction(transaction: any, signer: SolanaSigner, rpcUrls?: string[]): Promise<{ hash: string[] }> {
-        return this.sendBundle([transaction], signer, rpcUrls);
+    async sendSingleTransaction(transaction: any, signer: SolanaSigner): Promise<{ hash: string[] }> {
+        return this.sendBundle([transaction], signer);
     }
 }
 
