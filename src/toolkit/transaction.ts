@@ -368,17 +368,17 @@ export class TransactionAPI extends API {
     private async evmSendTransaction(signer: EtherSigner | WagmiSigner, tx: any): Promise<{ hash: string | undefined }> {
         try {
             const unsignedTx = ethers.Transaction.from(tx.hex); // Validate the transaction format
+            const jsonTx = unsignedTx.toJSON();
 
             const txParams: any = {
-                to: unsignedTx.to ? unsignedTx.to as `0x${string}` : ethers.ZeroAddress,
-                data: unsignedTx.data as `0x${string}`,
+                to: unsignedTx.to ? jsonTx.to : ethers.ZeroAddress,
+                data: jsonTx.data,
             };
-
-            if (unsignedTx.value) { txParams.value = unsignedTx.value; }
-            if (unsignedTx.gasLimit) { txParams.gasLimit = unsignedTx.gasLimit; }
-            if (unsignedTx.maxFeePerGas) { txParams.maxFeePerGas = unsignedTx.maxFeePerGas; }
-            if (unsignedTx.maxPriorityFeePerGas) { txParams.maxPriorityFeePerGas = unsignedTx.maxPriorityFeePerGas; }
-
+            if (unsignedTx.value) { txParams.value = jsonTx.value; }
+            if (unsignedTx.gasLimit) { txParams.gasLimit = jsonTx.gasLimit; }
+            if (unsignedTx.maxFeePerGas) { txParams.maxFeePerGas = jsonTx.maxFeePerGas; }
+            if (unsignedTx.maxPriorityFeePerGas) { txParams.maxPriorityFeePerGas = jsonTx.maxPriorityFeePerGas; }
+            
             if (signer.sendTransaction) {
                 let txResponse: any;
                 let hash: string;
