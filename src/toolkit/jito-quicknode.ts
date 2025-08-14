@@ -219,8 +219,9 @@ export class QuickNodeJitoClient {
             // Get signer's public key
             const signerPublicKey = new web3.PublicKey(signer.publicKey.toBase58());
 
-            const signedTransactions: string[] = [];
-
+            // Prepare all transactions for signing
+            const unsignedTransactions: (web3.Transaction | web3.VersionedTransaction)[] = [];
+            
             for (const tx of transactions) {
                 const transactionBuffer = new Uint8Array(
                     atob(tx.base64)
@@ -250,20 +251,35 @@ export class QuickNodeJitoClient {
                     // For versioned transactions, we don't modify them as they're already built
                 }
 
-                // Sign the transaction
-                const signedTransaction = await signer.signTransaction(transaction);
-                const serializedTransaction = Buffer.from(signedTransaction.serialize());
-                const base64EncodedTransaction = serializedTransaction.toString('base64');
-                
-                signedTransactions.push(base64EncodedTransaction);
+                unsignedTransactions.push(transaction);
             }
 
+            // Sign all transactions (batch or individual)
+            let signedTransactions: (web3.Transaction | web3.VersionedTransaction)[];
+            if (signer.signAllTransactions && unsignedTransactions.length > 1) {
+                // Use signAllTransactions for batch signing when available
+                signedTransactions = await signer.signAllTransactions(unsignedTransactions);
+            } else {
+                // Fallback to individual signing
+                signedTransactions = [];
+                for (const transaction of unsignedTransactions) {
+                    const signedTransaction = await signer.signTransaction(transaction);
+                    signedTransactions.push(signedTransaction);
+                }
+            }
+
+            // Convert signed transactions to base64
+            const base64SignedTransactions: string[] = signedTransactions.map(signedTx => {
+                const serializedTransaction = Buffer.from(signedTx.serialize());
+                return serializedTransaction.toString('base64');
+            });
+
             // Simulate the bundle first
-            const simulation = await this.simulateBundle(signedTransactions);
+            const simulation = await this.simulateBundle(base64SignedTransactions);
             this.validateSimulation(simulation);
 
             // Send the bundle
-            const bundleId = await this.sendBundleRpc(signedTransactions);
+            const bundleId = await this.sendBundleRpc(base64SignedTransactions);
             console.log(`Bundle sent with ID: ${bundleId}`);
 
             // Poll for bundle status

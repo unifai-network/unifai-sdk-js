@@ -34,6 +34,7 @@ export interface SolanaSigner {
     publicKey: { toBase58: () => string }; // solana provider
 
     signTransaction: (tx: any) => Promise<any>;
+    signAllTransactions?: (txs: any[]) => Promise<any[]>;
 }
 
 export function isEtherSigner(signer: any): boolean {
