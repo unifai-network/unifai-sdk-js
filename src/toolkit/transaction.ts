@@ -215,7 +215,7 @@ export class TransactionAPI extends API {
         if (transactions.length === 1) {
             // Single transaction case
             try {
-                const result = await jitoClient.sendSingleTransaction(transactions[0], signer, config?.rpcUrls);
+                const result = await jitoClient.sendSingleTransaction(transactions[0], signer);
                 
                 // Complete the transaction
                 if (result.hash.length > 0) {
