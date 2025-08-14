@@ -188,7 +188,6 @@ export class QuickNodeJitoClient {
                 const status = bundleStatus.value[0]?.status ?? 'Unknown';
 
                 if (status !== lastStatus) {
-                    console.log(`Bundle status: ${status}`);
                     lastStatus = status;
                 }
 
@@ -273,21 +272,20 @@ export class QuickNodeJitoClient {
             }
 
             // Simulate the bundle first
-            console.log('Simulating bundle...');
             const simulation = await this.simulateBundle(signedTransactions);
             this.validateSimulation(simulation);
-            console.log('Bundle simulation succeeded');
 
             // Send the bundle
-            console.log('Sending bundle...');
             const bundleId = await this.sendBundleRpc(signedTransactions);
             console.log(`Bundle sent with ID: ${bundleId}`);
 
             // Poll for bundle status
-            console.log('Waiting for bundle to land...');
             const success = await this.pollBundleStatus(bundleId);
             
             if (success) {
+                // wait for 1 second to ensure txn hashes are available
+                await new Promise(resolve => setTimeout(resolve, 1000));
+
                 // Get final bundle status to retrieve transaction hashes
                 const bundleStatus = await this.getBundleStatuses([bundleId]);
                 
@@ -306,69 +304,7 @@ export class QuickNodeJitoClient {
     }
 
     async sendSingleTransaction(transaction: any, signer: SolanaSigner, rpcUrls?: string[]): Promise<{ hash: string[] }> {
-        try {
-            const connection = this.getConnection(rpcUrls);
-            
-            // Get a random tip account
-            const jitoTipAccount = new web3.PublicKey(await this.getTipAccount());
-            
-            const signerPublicKey = new web3.PublicKey(signer.publicKey.toBase58());
-
-            const transactionBuffer = new Uint8Array(
-                atob(transaction.base64)
-                    .split('')
-                    .map((c) => c.charCodeAt(0))
-            );
-
-            let tx: web3.Transaction | web3.VersionedTransaction;
-            if (transaction.type === 'legacy') {
-                tx = web3.Transaction.from(transactionBuffer);
-                
-                // Add Jito tip instruction for legacy transactions
-                (tx as web3.Transaction).add(
-                    web3.SystemProgram.transfer({
-                        fromPubkey: signerPublicKey,
-                        toPubkey: jitoTipAccount,
-                        lamports: this.config.tipAmount!,
-                    })
-                );
-
-                // Update blockhash and fee payer
-                const { blockhash } = await connection.getLatestBlockhash();
-                (tx as web3.Transaction).recentBlockhash = blockhash;
-                (tx as web3.Transaction).feePayer = signerPublicKey;
-            } else {
-                tx = web3.VersionedTransaction.deserialize(transactionBuffer);
-            }
-
-            // Sign the transaction
-            const signedTransaction = await signer.signTransaction(tx);
-            const serializedTransaction = Buffer.from(signedTransaction.serialize());
-            const base64Transaction = serializedTransaction.toString('base64');
-
-            // For single transaction, we can use the bundle functionality with 1 transaction
-            const bundleId = await this.sendBundleRpc([base64Transaction]);
-            console.log(`Single transaction sent as bundle with ID: ${bundleId}`);
-
-            // Poll for bundle status
-            const success = await this.pollBundleStatus(bundleId);
-            
-            if (success) {
-                // Get final bundle status to retrieve transaction hash
-                const bundleStatus = await this.getBundleStatuses([bundleId]);
-                
-                if (bundleStatus.value?.[0]?.transactions) {
-                    return { hash: bundleStatus.value[0].transactions };
-                }
-                
-                throw new Error('Could not retrieve transaction hash from bundle');
-            } else {
-                throw new Error('Transaction failed to land');
-            }
-
-        } catch (error) {
-            throw new Error(`QuickNode Jito single transaction send failed: ${error}`);
-        }
+        return this.sendBundle([transaction], signer, rpcUrls);
     }
 }
 
