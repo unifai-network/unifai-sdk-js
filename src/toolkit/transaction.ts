@@ -374,10 +374,10 @@ export class TransactionAPI extends API {
                 to: unsignedTx.to ? jsonTx.to : ethers.ZeroAddress,
                 data: jsonTx.data,
             };
-            if (unsignedTx.value) { txParams.value = jsonTx.value; }
-            if (unsignedTx.gasLimit) { txParams.gasLimit = jsonTx.gasLimit; }
-            if (unsignedTx.maxFeePerGas) { txParams.maxFeePerGas = jsonTx.maxFeePerGas; }
-            if (unsignedTx.maxPriorityFeePerGas) { txParams.maxPriorityFeePerGas = jsonTx.maxPriorityFeePerGas; }
+            if (unsignedTx.value) { txParams.value = hexPrefix(jsonTx.value); }
+            if (unsignedTx.gasLimit) { txParams.gasLimit = hexPrefix(jsonTx.gasLimit); }
+            if (unsignedTx.maxFeePerGas) { txParams.maxFeePerGas = hexPrefix(jsonTx.maxFeePerGas); }
+            if (unsignedTx.maxPriorityFeePerGas) { txParams.maxPriorityFeePerGas = hexPrefix(jsonTx.maxPriorityFeePerGas); }
             
             if (signer.sendTransaction) {
                 let txResponse: any;
@@ -590,4 +590,8 @@ export class TransactionAPI extends API {
         return res
     }
 
+}
+
+function hexPrefix(hex: string) {
+    return hex.startsWith('0x') ? hex : `0x${hex}`;
 }
