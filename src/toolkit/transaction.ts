@@ -501,7 +501,18 @@ export class TransactionAPI extends API {
             }
 
             if (transactionResult.value.err) {
-                throw new Error(`Transaction failed: ${transactionResult.value.err}`);
+                let errorDetail: string;
+                if (typeof transactionResult.value.err === 'object') {
+                    try {
+                        errorDetail = JSON.stringify(transactionResult.value.err, null, 2);
+                    } catch (jsonError) {
+                        // Fallback for circular references or other JSON.stringify errors
+                        errorDetail = transactionResult.value.err.toString();
+                    }
+                } else {
+                    errorDetail = String(transactionResult.value.err);
+                }
+                throw new Error(`Transaction failed: ${errorDetail}`);
             }
 
             return { hash: signature }
