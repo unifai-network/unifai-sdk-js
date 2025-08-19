@@ -42,8 +42,8 @@ export class TransactionAPI extends API {
         return data
     }
 
-    public async completeTransaction(txId: string, txHash: string, address: string) {
-        let completeBody = { txId, txHash, address };
+    public async completeTransaction(txId: string, txHash: string[], address: string) {
+        let completeBody = { txId, txHash: txHash.join(','), address };
         let data = await this.request('POST', `/tx/complete`, { json: completeBody });
         if (data.success || data.message === 'Transaction completed successfully') {
             return data;
@@ -174,7 +174,7 @@ export class TransactionAPI extends API {
         // Handle completion and return logic
         if (hashes.length > 0) {
             try {
-                await this.completeTransaction(txId, hashes[hashes.length - 1], address);
+                await this.completeTransaction(txId, hashes, address);
             } catch (error: any) {
                 console.error(`completeTransaction failed: ${error}`);
             }
@@ -221,7 +221,7 @@ export class TransactionAPI extends API {
                 if (result.hash.length > 0) {
                     const address = await this.getAddress(signer);
                     try {
-                        await this.completeTransaction(txId, result.hash[0], address);
+                        await this.completeTransaction(txId, result.hash, address);
                     } catch (error: any) {
                         console.error(`completeTransaction failed: ${error}`);
                     }
@@ -287,9 +287,8 @@ export class TransactionAPI extends API {
         // Handle completion and results based on onFailure mode
         if (allHashes.length > 0) {
             const address = await this.getAddress(signer);
-            const lastHash = allHashes[allHashes.length - 1];
             try {
-                await this.completeTransaction(txId, lastHash, address);
+                await this.completeTransaction(txId, allHashes, address);
             } catch (error: any) {
                 console.error(`completeTransaction failed: ${error}`);
             }
