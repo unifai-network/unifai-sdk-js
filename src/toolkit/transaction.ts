@@ -12,6 +12,7 @@ import { deriveApiKey } from "./polymarket/apikey"
 import { createL2Headers } from "./polymarket/l2header"
 import { createJitoClient, shouldUseJito, JitoConfig, JITO_CONSTANTS, JitoClient } from './jito';
 import { createQuickNodeJitoClient, QuickNodeJitoConfig, QuickNodeJitoClient } from './jito-quicknode';
+import { getSolanaErrorInfo } from './solana-errors';
 
 export class TransactionAPI extends API {
     constructor(config: APIConfig) {
@@ -229,7 +230,8 @@ export class TransactionAPI extends API {
                 
                 return { hash: result.hash };
             } catch (error: any) {
-                throw new Error(`Jito single transaction failed: ${error.message || error}`);
+                const errorInfo = getSolanaErrorInfo(error);
+                throw new Error(`Jito single transaction failed: ${errorInfo.message}`);
             }
         }
 
@@ -262,8 +264,8 @@ export class TransactionAPI extends API {
                     await new Promise(resolve => setTimeout(resolve, 1000 * interval));
                 }
             } catch (error: any) {
-                const errorMessage = error.message || error.toString();
-                failed.push({ batchIndex: i, error: errorMessage, txCount: batch.length });
+                const errorInfo = getSolanaErrorInfo(error);
+                failed.push({ batchIndex: i, error: errorInfo.message, txCount: batch.length });
                 
                 if (onFailure === 'skip') {
                     // Continue with next batch
@@ -274,7 +276,7 @@ export class TransactionAPI extends API {
                         ? `Successful batches: ${successful.map(s => `batch ${s.batchIndex + 1} (${s.hashes.length} txns: ${s.hashes.join(', ')})`).join('; ')}`
                         : '';
                     
-                    const errorDetails = `Batch ${i + 1}/${batches.length} (${batch.length} transactions) failed: ${errorMessage}`;
+                    const errorDetails = `Batch ${i + 1}/${batches.length} (${batch.length} transactions) failed: ${errorInfo.message}`;
                     const fullError = successfulInfo 
                         ? `${errorDetails}. ${successfulInfo}`
                         : errorDetails;
@@ -466,7 +468,8 @@ export class TransactionAPI extends API {
             }
 
             if (lastError && successfulTransactions.length === 0) {
-                throw new Error(`${lastError?.message}, set RPC URLs when calling signAndSendTransaction`);
+                const errorInfo = getSolanaErrorInfo(lastError);
+                throw new Error(`${errorInfo.message}, set RPC URLs when calling signAndSendTransaction`);
             }
 
             if (!connection || !signature) {
@@ -500,24 +503,15 @@ export class TransactionAPI extends API {
             }
 
             if (transactionResult.value.err) {
-                let errorDetail: string;
-                if (typeof transactionResult.value.err === 'object') {
-                    try {
-                        errorDetail = JSON.stringify(transactionResult.value.err, null, 2);
-                    } catch (jsonError) {
-                        // Fallback for circular references or other JSON.stringify errors
-                        errorDetail = transactionResult.value.err.toString();
-                    }
-                } else {
-                    errorDetail = String(transactionResult.value.err);
-                }
-                throw new Error(`Transaction failed: ${errorDetail}`);
+                const errorInfo = getSolanaErrorInfo(transactionResult.value.err);
+                throw new Error(`solana confirmTransaction failed: ${errorInfo.message}`);
             }
 
             return { hash: signature }
 
         } catch (error) {
-            throw new Error(`solSendTransaction: ${error}`);
+            const errorInfo = getSolanaErrorInfo(error);
+            throw new Error(`solSendTransaction: ${errorInfo.message}`);
         }
     }
 
