@@ -30,13 +30,13 @@ export class TransactionAPI extends API {
             type,
             payload,
         }
-        return await this.request('POST', `/tx/create`, { json: data, timeout: 30000 });
+        return await this.request('POST', `/tx/create`, { json: data, timeout: 60000 });
     }
 
     public async buildTransaction(txId: string, signerOrAddress: Signer | string) {
         let address = typeof signerOrAddress === 'string' ? signerOrAddress : await this.getAddress(signerOrAddress);
         let buildBody = { txId, address };
-        let data = await this.request('POST', `/tx/build`, { json: buildBody, timeout: 30000 });
+        let data = await this.request('POST', `/tx/build`, { json: buildBody, timeout: 60000 });
         if (!data.success) {
             throw data.error
         }
