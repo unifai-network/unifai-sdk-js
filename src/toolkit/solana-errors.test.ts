@@ -155,6 +155,14 @@ describe('getSolanaErrorInfo', () => {
                 expect(result.message).toBe(SOLANA_ERRORS[6024]);
             });
         });
+
+        describe('code 6059 - order amount too small', () => {
+            it('should match Custom 6059 error', () => {
+                const result = getSolanaErrorInfo('{"Custom": 6059}');
+                expect(result.code).toBe(6059);
+                expect(result.message).toBe(SOLANA_ERRORS[6059]);
+            });
+        });
     });
 
     describe('unrecognized errors', () => {

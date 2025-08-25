@@ -39,6 +39,11 @@ const SOLANA_ERROR_CONFIGS = [
         code: 6024,
         message: 'You might be passing an amount or min_sol_amount that is too large and is resulting in an overflow when calculating the amount of tokens that you will receive.',
         patterns: [/Custom": 6024\b/]
+    },
+    {
+        code: 6059,
+        message: 'Order amount is too small.',
+        patterns: [/Custom": 6059\b/]
     }
 ];
 
