@@ -504,7 +504,11 @@ export class TransactionAPI extends API {
 
             if (transactionResult.value.err) {
                 const errorInfo = getSolanaErrorInfo(transactionResult.value.err);
-                throw new Error(`solana confirmTransaction failed: ${errorInfo.message}`);
+                if (errorInfo.code === 0) {
+                    throw new Error(`solana confirmTransaction failed: ${errorInfo.message}, signature: ${signature}`);
+                } else {
+                    throw new Error(`solana confirmTransaction failed: ${errorInfo.message}`);
+                }
             }
 
             return { hash: signature }
