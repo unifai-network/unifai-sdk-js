@@ -8,7 +8,7 @@ const SOLANA_ERROR_CONFIGS = [
     {
         code: 1,
         message: 'insufficient solana or token balance',
-        patterns: [/custom program error: 0x1\b/, /Custom": 1\b/]
+        patterns: [/custom program error:\s*0x1\b/, /Custom":\s*1\b/]
     },
     {
         code: 1001,
@@ -28,7 +28,7 @@ const SOLANA_ERROR_CONFIGS = [
     {
         code: 3007,
         message: 'The given account is owned by a different program than expected.',
-        patterns: [/Custom": 3007\b/]
+        patterns: [/Custom":\s*3007\b/]
     },
     {
         code: 4001,
@@ -38,12 +38,12 @@ const SOLANA_ERROR_CONFIGS = [
     {
         code: 6024,
         message: 'You might be passing an amount or min_sol_amount that is too large and is resulting in an overflow when calculating the amount of tokens that you will receive.',
-        patterns: [/Custom": 6024\b/]
+        patterns: [/Custom":\s*6024\b/]
     },
     {
         code: 6059,
         message: 'Order amount is too small.',
-        patterns: [/Custom": 6059\b/]
+        patterns: [/Custom":\s*6059\b/]
     }
 ];
 
