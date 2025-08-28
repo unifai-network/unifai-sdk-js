@@ -12,7 +12,7 @@ export interface QuickNodeJitoConfig {
 export const QUICKNODE_JITO_CONSTANTS = {
     DEFAULT_TIP_AMOUNT: 1000, // lamports
     DEFAULT_POLL_INTERVAL_MS: 3000,
-    DEFAULT_POLL_TIMEOUT_MS: 30000,
+    DEFAULT_POLL_TIMEOUT_MS: 120000,
     DEFAULT_WAIT_BEFORE_POLL_MS: 5000,
     BUNDLE_TIMEOUT: 120000, // 120 seconds
     MAX_BUNDLE_SIZE: 5,
@@ -178,8 +178,8 @@ export class QuickNodeJitoClient {
 
         while (Date.now() - startTime < timeoutMs) {
             try {
-                const bundleStatus = await this.getInflightBundleStatuses([bundleId]);
-                const status = bundleStatus.value[0]?.status ?? 'Unknown';
+                const inflightBundleStatus = await this.getInflightBundleStatuses([bundleId]);
+                const status = inflightBundleStatus.value[0]?.status ?? 'Unknown';
 
                 if (status !== lastStatus) {
                     lastStatus = status;
