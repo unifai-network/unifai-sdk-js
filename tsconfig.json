@@ -1,6 +1,6 @@
 {
   "compilerOptions": {
-    "target": "ES6",                          // Specify ECMAScript target version
+    "target": "ES2021",                          // Specify ECMAScript target version
     "module": "CommonJS",                     // Specify module code generation
     "outDir": "dist",                         // Redirect output structure to the `dist` directory
     "rootDir": "src",                         // Specify the root directory of input files
