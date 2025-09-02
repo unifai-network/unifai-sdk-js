@@ -481,11 +481,13 @@ export class TransactionAPI extends API {
 
             const finalConnection = connection;
             const finalSignature = signature;
-            let { promise: promise1, intervalId } = this.solPollTransactionStatus(finalConnection, finalSignature, DEFAULT_MAX_POLL_TIMES, DEFAULT_POLL_INTERVAL);
-            let promise2 = this.solWaitTransactionConfirmed(finalConnection, finalSignature, signedTransaction);
+            const abortController = new AbortController();
+            let pollResult = this.solPollTransactionStatus(finalConnection, finalSignature, DEFAULT_MAX_POLL_TIMES, DEFAULT_POLL_INTERVAL, abortController.signal);
+            let wsResult = this.solWaitTransactionConfirmed(finalConnection, finalSignature, signedTransaction);
 
             try {
-                let result: any = await Promise.any([promise1, promise2])
+                let result: any = await Promise.any([pollResult, wsResult]);
+                abortController.abort();
 
                 if (result?.value?.err) {
                     const errorInfo = getSolanaErrorInfo(result.value.err);
@@ -497,92 +499,75 @@ export class TransactionAPI extends API {
                 }
             } catch (error) {
                 console.error(`Error confirming transaction: ${error}`)
-            } finally {
-                if (intervalId) {
-                    clearInterval(intervalId)
-                    intervalId = null
-                }
+                abortController.abort();
             }
 
             return { hash: signature }
-
         } catch (error) {
             const errorInfo = getSolanaErrorInfo(error);
             throw new Error(`solSendTransaction: ${errorInfo.message}`);
         }
     }
 
-    private solPollTransactionStatus(connection: web3.Connection, signature: string,
-        maxPollTimes: number = DEFAULT_MAX_POLL_TIMES, pollInterval: number = DEFAULT_POLL_INTERVAL): { promise: Promise<any>, intervalId: ReturnType<typeof setInterval> | null } {
-        let intervalId: ReturnType<typeof setInterval> | null = null;
-        let promise = new Promise((resolve, reject) => {
-            let pollTimes = 0;
-            intervalId = setInterval(async () => {
-                pollTimes++;
-                let err: any = null;
-                try {
-                    const status = await connection.getSignatureStatus(signature, {
-                        searchTransactionHistory: true,
-                    })
+    private async solPollTransactionStatus(
+        connection: web3.Connection,
+        signature: string,
+        maxPollTimes: number = DEFAULT_MAX_POLL_TIMES,
+        pollInterval: number = DEFAULT_POLL_INTERVAL,
+        signal?: AbortSignal
+    ): Promise<any> {
+        for (let pollTimes = 0; pollTimes < maxPollTimes; pollTimes++) {
+            await new Promise(resolve => setTimeout(resolve, pollInterval));
 
-                    if (status && (status.value?.confirmationStatus === 'confirmed' ||
-                        status.value?.confirmationStatus === 'finalized')) {
-                        if (intervalId) {
-                            clearInterval(intervalId)
-                            intervalId = null
-                        }
+            if (signal?.aborted) {
+                throw new Error('Polling aborted');
+            }
 
-                        resolve(status)
-                    }
-                } catch (error) {
-                    err = error;
+            let err: any = null;
+            try {
+                const status = await connection.getSignatureStatus(signature, {
+                    searchTransactionHistory: true,
+                })
+
+                if (['confirmed', 'finalized'].includes(status?.value?.confirmationStatus || '')) {
+                    return status;
                 }
+            } catch (error) {
+                err = error;
+            }
 
-                if (pollTimes >= maxPollTimes) {
-                    if (intervalId) {
-                        clearInterval(intervalId)
-                        intervalId = null
-                    }
-                    reject(err || new Error('Transaction not confirmed, please check solana explorer.'))
-                }
-            }, pollInterval);
-        });
-        return { promise, intervalId };
+            if (pollTimes >= maxPollTimes - 1) {
+                throw err || new Error('Transaction not confirmed, please check solana explorer.');
+            }
+        }
     }
 
-    private solWaitTransactionConfirmed(connection: web3.Connection, signature: string,
-        signedTransaction: any): Promise<any> {
-        return new Promise((resolve, reject) => {
-            (async () => {
-                let transactionResult;
-                try {
-                    const blockhash = await connection.getLatestBlockhash();
-                    if (signedTransaction instanceof web3.Transaction) {
-                        transactionResult = await connection.confirmTransaction(
-                            {
-                                signature: signature,
-                                blockhash: signedTransaction.recentBlockhash ?? blockhash.blockhash,
-                                lastValidBlockHeight:
-                                    signedTransaction.lastValidBlockHeight ?? blockhash.lastValidBlockHeight,
-                            },
-                            'confirmed',
-                        );
-                    } else {
-                        transactionResult = await connection.confirmTransaction(
-                            {
-                                signature: signature,
-                                blockhash: signedTransaction._message?.recentBlockhash ?? blockhash.blockhash,
-                                lastValidBlockHeight: signedTransaction.lastValidBlockHeight ?? blockhash.lastValidBlockHeight,
-                            },
-                            'confirmed',
-                        );
-                    }
-                    resolve(transactionResult)
-                } catch (error) {
-                    reject(error)
-                }
-            })();
-        });
+    private async solWaitTransactionConfirmed(
+        connection: web3.Connection,
+        signature: string,
+        signedTransaction: any,
+    ): Promise<any> {
+        const blockhash = await connection.getLatestBlockhash();
+        if (signedTransaction instanceof web3.Transaction) {
+            return await connection.confirmTransaction(
+                {
+                    signature: signature,
+                    blockhash: signedTransaction.recentBlockhash ?? blockhash.blockhash,
+                    lastValidBlockHeight:
+                        signedTransaction.lastValidBlockHeight ?? blockhash.lastValidBlockHeight,
+                },
+                'confirmed',
+            );
+        } else {
+            return await connection.confirmTransaction(
+                {
+                    signature: signature,
+                    blockhash: signedTransaction._message?.recentBlockhash ?? blockhash.blockhash,
+                    lastValidBlockHeight: signedTransaction.lastValidBlockHeight ?? blockhash.lastValidBlockHeight,
+                },
+                'confirmed',
+            );
+        }
     }
 
     private async polymarketSendTransaction(signer: EtherSigner | WagmiSigner, tx: any,
