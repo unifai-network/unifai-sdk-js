@@ -41,6 +41,11 @@ const SOLANA_ERROR_CONFIGS = [
         patterns: [/Custom":\s*6024\b/]
     },
     {
+        code: 6027,
+        message: 'This account is not authorized to perform this action.',
+        patterns: [/custom program error:\s*6027\b/, /custom program error:\s*0x178b\b/]
+    },
+    {
         code: 6059,
         message: 'Order amount is too small.',
         patterns: [/Custom":\s*6059\b/]
