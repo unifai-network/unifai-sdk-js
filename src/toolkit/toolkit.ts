@@ -4,6 +4,7 @@ import { EventEmitter } from 'events';
 import { BACKEND_WS_ENDPOINT } from '../common';
 import { ActionContext, ActionResult } from './context';
 import { ToolkitAPI } from './api';
+import { ToolsAPI } from '../tools/api';
 import { ActionDescription, ServerToToolkitMessage, ServerToToolkitMessageType, ActionMessageData, ToolkitToServerMessage, ToolkitToServerMessageType, RegisterActionsMessageData } from './messages';
 
 interface ActionHandler {
@@ -19,12 +20,14 @@ interface ToolkitConfig {
 }
 
 export class Toolkit extends EventEmitter {
+  private id: string | null;
   private apiKey: string;
   public wsEndpoint: string;
   public ws: WebSocket | null;
   public reconnectInterval: number;
   public actionHandlers: { [key: string]: ActionHandler };
   public api: ToolkitAPI;
+  private toolsAPI: ToolsAPI | null;
 
   constructor({ apiKey, reconnectInterval = 5000 }: ToolkitConfig) {
     super();
@@ -34,6 +37,8 @@ export class Toolkit extends EventEmitter {
     this.actionHandlers = {};
     this.wsEndpoint = BACKEND_WS_ENDPOINT;
     this.api = new ToolkitAPI({ apiKey });
+    this.toolsAPI = new ToolsAPI({});;
+    this.id = null;
     this.setWsEndpoint(BACKEND_WS_ENDPOINT);
   }
 
@@ -80,6 +85,15 @@ export class Toolkit extends EventEmitter {
 
   public event(eventName: string, handler: (...args: any[]) => void): void {
     this.on(eventName, handler);
+  }
+
+  /**
+   * Get information about the current toolkit.
+   * 
+   * @returns Promise containing toolkit information
+   */
+  public async me(): Promise<any> {
+    return await this.api.me();
   }
 
   /**
@@ -143,20 +157,19 @@ export class Toolkit extends EventEmitter {
   }
 
   private async connect(): Promise<void> {
+    try {
+      const result = await this.me();
+      this.id = result.id;
+    } catch (error) {
+      console.error('Failed to get self ID:', error);
+    }
+
     while (true) {
       try {
         this.ws = new WebSocket(this.wsEndpoint);
 
         this.ws.on('open', async () => {
           console.log('WebSocket connection established.');
-
-          const pingInterval = setInterval(() => {
-            this.ws?.ping();
-          }, 30000);
-
-          this.ws?.on('close', () => {
-            clearInterval(pingInterval);
-          });
 
           const actionsData: Record<string, ActionDescription> = {};
           for (const [action, handler] of Object.entries(this.actionHandlers)) {
@@ -172,7 +185,15 @@ export class Toolkit extends EventEmitter {
             data: { actions: actionsData } as RegisterActionsMessageData,
           };
 
-          await this.ws?.send(JSON.stringify(setActionsMessage));
+          this.ws?.send(JSON.stringify(setActionsMessage));
+
+          const pingInterval = setInterval(() => {
+            this.ws?.ping();
+          }, 30000);
+
+          this.ws?.on('close', () => {
+            clearInterval(pingInterval);
+          });
 
           this.emit('ready');
         });
@@ -186,8 +207,41 @@ export class Toolkit extends EventEmitter {
         });
 
         await new Promise((resolve, reject) => {
-          this.ws?.on('close', resolve);
-          this.ws?.on('error', reject);
+          let searchInterval: any = null;
+          if (Object.keys(this.actionHandlers).length > 0 && this.toolsAPI && this.id) {
+            searchInterval = setInterval(async () => {
+              let retryCount = 0;
+              const maxRetries = 3;
+              while (retryCount < maxRetries) {
+                try {
+                  const result = await this.toolsAPI!.searchTools({ includeToolkits: this.id });
+                  if (!result || (Array.isArray(result) && result.length === 0)) {
+                    throw new Error('No actions found, there might be a problem with the connection or the server');
+                  }
+                  break;
+                } catch (error) {
+                  retryCount++;
+                  if (retryCount >= maxRetries) {
+                    clearInterval(searchInterval);
+                    reject(error);
+                    return;
+                  }
+                  const delay = Math.pow(2, retryCount) * 1000;
+                  await new Promise(resolve => setTimeout(resolve, delay));
+                }
+              }
+            }, 30000);
+          }
+
+          this.ws?.on('close', () => {
+            clearInterval(searchInterval);
+            resolve(null);
+          });
+
+          this.ws?.on('error', (error) => {
+            clearInterval(searchInterval);
+            reject(error);
+          });
         });
       } catch (error) {
         console.error('Error during WebSocket connection:', error);

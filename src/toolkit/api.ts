@@ -11,6 +11,10 @@ export class ToolkitAPI extends API {
     super(config);
   }
 
+  public async me(): Promise<any> {
+    return await this.request('GET', '/toolkits/me');
+  }
+
   public async updateToolkit(info: Record<string, any>): Promise<void> {
     await this.request('POST', '/toolkits/fields/', { json: info });
   }
