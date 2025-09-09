@@ -8,7 +8,7 @@ export class ToolsAPI extends API {
     super(config);
   }
 
-  public async searchTools(args: Record<string, string>): Promise<any> {
+  public async searchTools(args: Record<string, any>): Promise<any> {
     return await this.request('GET', '/actions/search', { params: args });
   }
 
