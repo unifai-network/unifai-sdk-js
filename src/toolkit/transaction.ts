@@ -13,6 +13,7 @@ import { createL2Headers } from "./polymarket/l2header"
 import { createJitoClient, shouldUseJito, JitoConfig, JITO_CONSTANTS, JitoClient } from './jito';
 import { createQuickNodeJitoClient, QuickNodeJitoConfig, QuickNodeJitoClient } from './jito-quicknode';
 import { getSolanaErrorInfo } from './solana-errors';
+import { signL1Action } from "@nktkas/hyperliquid/signing";
 
 const DEFAULT_POLL_INTERVAL = 6000;
 const DEFAULT_MAX_POLL_TIMES = 20;
@@ -113,9 +114,9 @@ export class TransactionAPI extends API {
 
         let res;
         let hashes: string[] = [];
-        let successful: Array<{index: number, hash: string}> = [];
-        let failed: Array<{index: number, error: string}> = [];
-        
+        let successful: Array<{ index: number, hash: string }> = [];
+        let failed: Array<{ index: number, error: string }> = [];
+
         // Determine onFailure behavior with priority: config.onFailure > data.onFailure > default (stop)
         const onFailure = config?.onFailure || data.onFailure || 'stop';
 
@@ -140,6 +141,9 @@ export class TransactionAPI extends API {
                     case 'solana': // Solana
                         res = await this.solSendTransaction(signer as SolanaSigner, tx, config);
                         break;
+                    case 'hyperliquid': // hyperliquid orders
+                        res = await this.hyperliquidSendTransaction(signer as EtherSigner | WagmiSigner, tx);
+                        break;
 
                     default: // evm
                         res = await this.evmSendTransaction(signer as EtherSigner | WagmiSigner, tx);
@@ -158,16 +162,16 @@ export class TransactionAPI extends API {
             } catch (error: any) {
                 const errorMessage = error.message || error.toString();
                 failed.push({ index: i, error: errorMessage });
-                
+
                 if (onFailure === 'skip') {
                     // Continue with next transaction
                     continue;
                 } else {
                     // Stop mode: throw error with details
-                    const successfulIndices = successful.map(s => s.index+1);
+                    const successfulIndices = successful.map(s => s.index + 1);
                     const successfulHashes = successful.map(s => s.hash);
-                    const errorDetails = `Transaction ${i+1} failed: ${errorMessage}`;
-                    const fullError = successfulHashes.length > 0 
+                    const errorDetails = `Transaction ${i + 1} failed: ${errorMessage}`;
+                    const fullError = successfulHashes.length > 0
                         ? `${errorDetails}. Transaction ${successfulIndices.join(', ')} are successful: [${successfulHashes.join(', ')}]`
                         : errorDetails;
                     throw new Error(`signAndSendTransaction: ${fullError}`);
@@ -185,7 +189,7 @@ export class TransactionAPI extends API {
         }
 
         if (onFailure === 'skip') {
-            const failedDetails = failed.map(f => `Transaction ${f.index+1}: ${f.error}`).join('; ');
+            const failedDetails = failed.map(f => `Transaction ${f.index + 1}: ${f.error}`).join('; ');
             // For skip mode, check if all transactions failed
             if (failed.length === transactions.length) {
                 throw new Error(`All transactions failed: ${failedDetails}`);
@@ -220,7 +224,7 @@ export class TransactionAPI extends API {
             // Single transaction case
             try {
                 const result = await jitoClient.sendSingleTransaction(transactions[0], signer);
-                
+
                 // Complete the transaction
                 if (result.hash.length > 0) {
                     const address = await this.getAddress(signer);
@@ -230,7 +234,7 @@ export class TransactionAPI extends API {
                         console.error(`completeTransaction failed: ${error}`);
                     }
                 }
-                
+
                 return { hash: result.hash };
             } catch (error: any) {
                 const errorInfo = getSolanaErrorInfo(error);
@@ -240,9 +244,9 @@ export class TransactionAPI extends API {
 
         // Bundle case - handle batching with failure tracking
         const allHashes: string[] = [];
-        let successful: Array<{batchIndex: number, hashes: string[]}> = [];
-        let failed: Array<{batchIndex: number, error: string, txCount: number}> = [];
-        
+        let successful: Array<{ batchIndex: number, hashes: string[] }> = [];
+        let failed: Array<{ batchIndex: number, error: string, txCount: number }> = [];
+
         // Split into batches if needed
         const batches: any[][] = [];
         if (transactions.length <= JITO_CONSTANTS.MAX_BUNDLE_SIZE) {
@@ -269,21 +273,21 @@ export class TransactionAPI extends API {
             } catch (error: any) {
                 const errorInfo = getSolanaErrorInfo(error);
                 failed.push({ batchIndex: i, error: errorInfo.message, txCount: batch.length });
-                
+
                 if (onFailure === 'skip') {
                     // Continue with next batch
                     continue;
                 } else {
                     // Stop mode: throw error with details
-                    const successfulInfo = successful.length > 0 
+                    const successfulInfo = successful.length > 0
                         ? `Successful batches: ${successful.map(s => `batch ${s.batchIndex + 1} (${s.hashes.length} txns: ${s.hashes.join(', ')})`).join('; ')}`
                         : '';
-                    
+
                     const errorDetails = `Batch ${i + 1}/${batches.length} (${batch.length} transactions) failed: ${errorInfo.message}`;
-                    const fullError = successfulInfo 
+                    const fullError = successfulInfo
                         ? `${errorDetails}. ${successfulInfo}`
                         : errorDetails;
-                    
+
                     throw new Error(`Jito bundle processing failed: ${fullError}`);
                 }
             }
@@ -305,7 +309,7 @@ export class TransactionAPI extends API {
                 const failedDetails = failed.map(f => `Batch ${f.batchIndex + 1} (${f.txCount} txns): ${f.error}`).join('; ');
                 throw new Error(`All Jito batches failed: ${failedDetails}`);
             }
-            
+
             // Return with error info if there were any failures
             if (failed.length > 0) {
                 const failedDetails = failed.map(f => `Batch ${f.batchIndex + 1} (${f.txCount} txns): ${f.error}`).join('; ');
@@ -313,7 +317,7 @@ export class TransactionAPI extends API {
                 const errorInfo = `Some batches failed: ${failedDetails}. Successful: ${successfulDetails}`;
                 return { hash: allHashes, error: errorInfo };
             }
-            
+
             return { hash: allHashes };
         } else {
             // For stop mode, we only reach here if all batches succeeded
@@ -337,7 +341,7 @@ export class TransactionAPI extends API {
                 // Try to find a QuickNode URL
                 endpoint = config.rpcUrls.find(url => url.includes('quiknode.pro'));
             }
-            
+
             const quickNodeConfig: QuickNodeJitoConfig = {
                 endpoint: endpoint,
                 tipAmount: config?.jitoTipAmount,
@@ -381,7 +385,7 @@ export class TransactionAPI extends API {
             if (unsignedTx.gasLimit) { txParams.gasLimit = toBeHex(unsignedTx.gasLimit); }
             if (unsignedTx.maxFeePerGas) { txParams.maxFeePerGas = toBeHex(unsignedTx.maxFeePerGas); }
             if (unsignedTx.maxPriorityFeePerGas) { txParams.maxPriorityFeePerGas = toBeHex(unsignedTx.maxPriorityFeePerGas); }
-            
+
             if (signer.sendTransaction) {
                 let txResponse: any;
                 let hash: string;
@@ -646,6 +650,52 @@ export class TransactionAPI extends API {
         const res = await this.sendTransaction("polygon", "MarketOrder", data)
 
         return res
+    }
+
+    private async hyperliquidSendTransaction(signer: EtherSigner | WagmiSigner, tx: any): Promise<{ hash: string | undefined }> {
+        const url = 'https://api.hyperliquid.xyz/exchange'
+        try {
+            const order = JSON.parse(tx.order);
+
+            const signature = await signL1Action({
+                wallet: signer,
+                action: order.action,
+                nonce: order.nonce,
+            });
+
+            const response = await fetch(url, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ action: order.action, signature, nonce: order.nonce }), // recommended to send the same formatted action
+            });
+
+            const responseClone = response.clone();
+            let res: any;
+            try {
+                res = await response.json();
+            } catch (error) {
+                res = await responseClone.text();
+                throw new Error(res);
+            }
+
+            let hash = '';
+            if (res.response && res.response.data && res.response.data.statuses && res.response.data.statuses.length > 0) {
+                if (res.response.data.statuses[0].resting && res.response.data.statuses[0].resting.oid) {
+                    hash = res.response.data.statuses[0].resting.oid;
+                } else {
+                    hash = JSON.stringify(res.response.data.statuses[0])
+                }
+            } else if (res.status == 'ok') {
+                hash = res.status;
+            } else { // res.status == 'err'
+                throw new Error(res.response);
+            } 
+
+            return { hash: hash };
+
+        } catch (error) {
+            throw new Error(`hyperliquidSendTransaction: ${error}`);
+        }
     }
 
 }

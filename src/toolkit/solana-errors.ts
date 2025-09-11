@@ -36,6 +36,11 @@ const SOLANA_ERROR_CONFIGS = [
         patterns: [/The string to be decoded is not correctly encoded/]
     },
     {
+        code: 6001,
+        message: 'Slippage tolerance exceeded.',
+        patterns: [/Custom":\s*6001\b/, /custom program error:\s*0x1771\b/]
+    },
+    {
         code: 6024,
         message: 'You might be passing an amount or min_sol_amount that is too large and is resulting in an overflow when calculating the amount of tokens that you will receive.',
         patterns: [/Custom":\s*6024\b/]
