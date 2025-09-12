@@ -490,7 +490,7 @@ export class TransactionAPI extends API {
             let wsResult = this.solWaitTransactionConfirmed(finalConnection, finalSignature, signedTransaction);
 
             try {
-                let result: any = await Promise.any([pollResult, wsResult]);
+                let result: any = await Promise.race([pollResult, wsResult]);
                 abortController.abort();
 
                 if (result?.value?.err) {
