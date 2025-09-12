@@ -1,7 +1,7 @@
 {
   "compilerOptions": {
     "target": "ES2021",                          // Specify ECMAScript target version
-    "module": "CommonJS",                     // Specify module code generation
+    "module": "Node16",                       // Specify module code generation
     "moduleResolution": "node16",             // Use Node.js v16+ module resolution strategy
     "outDir": "dist",                         // Redirect output structure to the `dist` directory
     "rootDir": "src",                         // Specify the root directory of input files
