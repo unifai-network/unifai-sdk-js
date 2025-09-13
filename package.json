@@ -3,6 +3,7 @@
   "version": "0.6.2",
   "description": "unifai-sdk-js is the Javascript/Typescript SDK for UnifAI, an AI native platform for dynamic tools and agent to agent communication.",
   "main": "dist/index.js",
+  "module": "dist/index.js",
   "types": "dist/index.d.ts",
   "bin": {
     "unifai-tools-mcp": "dist/tools/mcp/server.js"
@@ -44,5 +45,6 @@
     "toolkit"
   ],
   "author": "UnifAI",
-  "license": "MIT"
+  "license": "MIT",
+  "sideEffects": false
 }
