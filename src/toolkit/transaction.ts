@@ -484,26 +484,20 @@ export class TransactionAPI extends API {
             }
 
             const finalConnection = connection;
-            const finalSignature = signature;
             const abortController = new AbortController();
-            let pollResult = this.solPollTransactionStatus(finalConnection, finalSignature, DEFAULT_MAX_POLL_TIMES, DEFAULT_POLL_INTERVAL, abortController.signal);
-            let wsResult = this.solWaitTransactionConfirmed(finalConnection, finalSignature, signedTransaction);
+            let pollResult = this.solPollTransactionStatus(finalConnection, signature, DEFAULT_MAX_POLL_TIMES, DEFAULT_POLL_INTERVAL, abortController.signal);
+            let wsResult = this.solWaitTransactionConfirmed(finalConnection, signature, signedTransaction);
 
             try {
                 let result: any = await Promise.race([pollResult, wsResult]);
-                abortController.abort();
-
                 if (result?.value?.err) {
                     const errorInfo = getSolanaErrorInfo(result.value.err);
-                    if (errorInfo.code === 0) {
-                        throw new Error(`solana confirmTransaction failed: ${errorInfo.message}, signature: ${finalSignature}`);
-                    } else {
-                        throw new Error(`solana confirmTransaction failed: ${errorInfo.message}`);
-                    }
+                    throw new Error(`transaction ${signature} failed: ${errorInfo.message}`);
                 }
             } catch (error) {
-                abortController.abort();
                 throw new Error(`Error confirming transaction: ${error}`)
+            } finally {
+                abortController.abort();
             }
 
             return { hash: signature }
