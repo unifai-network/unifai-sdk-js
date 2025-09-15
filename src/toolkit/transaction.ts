@@ -502,8 +502,8 @@ export class TransactionAPI extends API {
                     }
                 }
             } catch (error) {
-                console.error(`Error confirming transaction: ${error}`)
                 abortController.abort();
+                throw new Error(`Error confirming transaction: ${error}`)
             }
 
             return { hash: signature }
