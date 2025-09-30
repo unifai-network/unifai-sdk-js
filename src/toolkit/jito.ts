@@ -121,19 +121,34 @@ export class JitoClient {
             const inflightStatus = await this.client.confirmInflightBundle(bundleId, JITO_CONSTANTS.BUNDLE_TIMEOUT);
             
             if ('confirmation_status' in inflightStatus && inflightStatus.confirmation_status === 'confirmed') {
-                // Get all transaction hashes from the bundle
-                const finalStatus = await this.client.getBundleStatuses([[bundleId]]);
-                
-                if (finalStatus.result?.value?.[0]?.transactions) {
-                    return { hash: finalStatus.result.value[0].transactions };
+                // Retry logic with exponential backoff to retrieve transaction hashes
+                const maxRetries = 3;
+                let lastError: Error | undefined;
+
+                for (let attempt = 0; attempt < maxRetries; attempt++) {
+                    try {
+                        // Exponential backoff: 1s, 2s, 4s
+                        const waitTime = 1000 * Math.pow(2, attempt);
+                        await new Promise(resolve => setTimeout(resolve, waitTime));
+
+                        // Get all transaction hashes from the bundle
+                        const finalStatus = await this.client.getBundleStatuses([[bundleId]]);
+
+                        if (finalStatus.result?.value?.[0]?.transactions) {
+                            return { hash: finalStatus.result.value[0].transactions };
+                        }
+
+                        // Fallback: try to extract from inflight status if available
+                        if ('transactions' in inflightStatus && inflightStatus.transactions) {
+                            return { hash: inflightStatus.transactions };
+                        }
+                    } catch (error) {
+                        lastError = error instanceof Error ? error : new Error(String(error));
+                        console.error(`Attempt ${attempt + 1}/${maxRetries} failed to retrieve transaction hashes:`, error);
+                    }
                 }
-                
-                // Fallback: try to extract from inflight status if available
-                if ('transactions' in inflightStatus && inflightStatus.transactions) {
-                    return { hash: inflightStatus.transactions };
-                }
-                
-                throw new Error('Could not retrieve transaction hashes from bundle');
+
+                throw new Error(`Could not retrieve transaction hashes from bundle after ${maxRetries} attempts${lastError ? `: ${lastError.message}` : ''}`);
             } else if ('err' in inflightStatus && inflightStatus.err) {
                 throw new Error(`Bundle processing failed: ${JSON.stringify(inflightStatus.err)}`);
             } else {
