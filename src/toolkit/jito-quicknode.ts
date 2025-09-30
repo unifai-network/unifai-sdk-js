@@ -286,17 +286,29 @@ export class QuickNodeJitoClient {
             const success = await this.pollBundleStatus(bundleId);
             
             if (success) {
-                // wait for 1 second to ensure txn hashes are available
-                await new Promise(resolve => setTimeout(resolve, 1000));
+                // Retry logic with exponential backoff to retrieve transaction hashes
+                const maxRetries = 3;
+                let lastError: Error | undefined;
 
-                // Get final bundle status to retrieve transaction hashes
-                const bundleStatus = await this.getBundleStatuses([bundleId]);
-                
-                if (bundleStatus.value?.[0]?.transactions) {
-                    return { hash: bundleStatus.value[0].transactions };
+                for (let attempt = 0; attempt < maxRetries; attempt++) {
+                    try {
+                        // Exponential backoff: 1s, 2s, 4s
+                        const waitTime = 1000 * Math.pow(2, attempt);
+                        await new Promise(resolve => setTimeout(resolve, waitTime));
+
+                        // Get final bundle status to retrieve transaction hashes
+                        const bundleStatus = await this.getBundleStatuses([bundleId]);
+
+                        if (bundleStatus.value?.[0]?.transactions) {
+                            return { hash: bundleStatus.value[0].transactions };
+                        }
+                    } catch (error) {
+                        lastError = error instanceof Error ? error : new Error(String(error));
+                        console.error(`Attempt ${attempt + 1}/${maxRetries} failed to retrieve transaction hashes:`, error);
+                    }
                 }
-                
-                throw new Error('Could not retrieve transaction hashes from bundle');
+
+                throw new Error(`Could not retrieve transaction hashes from bundle after ${maxRetries} attempts${lastError ? `: ${lastError.message}` : ''}`);
             } else {
                 throw new Error('Bundle failed to land');
             }
