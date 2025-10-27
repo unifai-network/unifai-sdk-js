@@ -17,7 +17,14 @@ export const QUICKNODE_JITO_CONSTANTS = {
     BUNDLE_TIMEOUT: 120000, // 120 seconds
     MAX_BUNDLE_SIZE: 5,
     MINIMUM_JITO_TIP: 1000, // lamports
+    DEFAULT_RPC_RETRIES: 3,
+    DEFAULT_RPC_RETRY_DELAY_MS: 2000,
 };
+
+export interface RpcCallConfig {
+    retries?: number;
+    retryDelayMs?: number;
+}
 
 // QuickNode Lil' JIT API types
 interface JitoBundleSimulationResponse {
@@ -98,31 +105,46 @@ export class QuickNodeJitoClient {
     }
 
 
-    private async makeRpcCall(method: string, params: any[]): Promise<any> {
-        const response = await fetch(this.config.endpoint!, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-                jsonrpc: '2.0',
-                id: Date.now(),
-                method,
-                params,
-            }),
-        });
+    private async makeRpcCall(method: string, params: any[], config?: RpcCallConfig): Promise<any> {
+        const retries = Math.max(1, config?.retries ?? QUICKNODE_JITO_CONSTANTS.DEFAULT_RPC_RETRIES);
+        const retryDelayMs = config?.retryDelayMs ?? QUICKNODE_JITO_CONSTANTS.DEFAULT_RPC_RETRY_DELAY_MS;
 
-        const data = await response.json();
+        for (let attempt = 0; attempt < retries; attempt++) {
+            const response = await fetch(this.config.endpoint!, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    jsonrpc: '2.0',
+                    id: Date.now(),
+                    method,
+                    params,
+                }),
+            });
 
-        if (!response.ok) {
-            throw new Error(`HTTP error! status: ${response.status}`);
+            const data = await response.json();
+
+            if (!response.ok) {
+                // Only retry on 429 (rate limit) errors
+                if (response.status === 429 && attempt < retries - 1) {
+                    const waitTime = retryDelayMs * Math.pow(2, attempt);
+                    console.warn(`Rate limited on ${method} (attempt ${attempt + 1}/${retries}), retrying in ${waitTime}ms...`);
+                    await new Promise(resolve => setTimeout(resolve, waitTime));
+                    continue;
+                }
+
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+
+            if (data.error) {
+                throw new Error(`RPC error: ${data.error.message}`);
+            }
+
+            return data.result;
         }
 
-        if (data.error) {
-            throw new Error(`RPC error: ${data.error.message}`);
-        }
-
-        return data.result;
+        throw new Error('RPC call failed');
     }
 
     private async getTipAccounts(): Promise<string[]> {
