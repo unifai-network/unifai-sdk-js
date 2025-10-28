@@ -2,7 +2,16 @@ import { ApiKeyCreds, Chain, L1PolyHeader } from "@polymarket/clob-client";
 import { get, post, RequestOptions } from '@polymarket/clob-client/dist/http-helpers'
 import { polymarketClobUrl, chainId } from './const';
 
+// In-memory cache for API keys, keyed by address
+const apiKeyCache = new Map<string, ApiKeyCreds>();
+
 export async function deriveApiKey(address: string, signer: any): Promise<ApiKeyCreds> {
+    const cacheKey = address.toLowerCase();
+    const cachedApiKey = apiKeyCache.get(cacheKey);
+    if (cachedApiKey) {
+        return cachedApiKey;
+    }
+
     const DERIVE_API_KEY = "/auth/derive-api-key";
 
     try {
@@ -16,12 +25,14 @@ export async function deriveApiKey(address: string, signer: any): Promise<ApiKey
         const headers = await createL1Headers(address, signer, chainId,);
 
         let apiKeyRaw = await myGet(endpoint, { headers })
-        if (!apiKeyRaw || !apiKeyRaw.apiKey || !apiKeyRaw.secret || !apiKeyRaw.passphrase) {
 
+        if (!apiKeyRaw || !apiKeyRaw.apiKey || !apiKeyRaw.secret || !apiKeyRaw.passphrase) {
             const apiKey = await createApiKey(address, signer)
             if (!apiKey) {
                 throw new Error(`fetch api key failed, response: ${JSON.stringify(apiKey)}`);
             }
+
+            apiKeyCache.set(cacheKey, apiKey);
             return apiKey
         }
 
@@ -30,6 +41,8 @@ export async function deriveApiKey(address: string, signer: any): Promise<ApiKey
             secret: apiKeyRaw.secret,
             passphrase: apiKeyRaw.passphrase,
         };
+
+        apiKeyCache.set(cacheKey, apiKey);
         return apiKey;
 
     } catch (error) {
@@ -133,5 +146,4 @@ async function createApiKey(address: string, signer: any): Promise<ApiKeyCreds> 
     };
 
     return apiKey;
-
 }

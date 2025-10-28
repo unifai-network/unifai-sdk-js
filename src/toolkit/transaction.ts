@@ -610,7 +610,6 @@ export class TransactionAPI extends API {
                 let hash = res.transactionHash || res.transactionsHashes?.[0]
                 return { hash: hash, orderId: res.orderId } // orderId is polymarket specific
             }
-
         } catch (error) {
             throw new Error(`polymarketSendTransaction: ${error}`)
         }
