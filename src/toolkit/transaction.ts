@@ -603,7 +603,7 @@ export class TransactionAPI extends API {
                 throw new Error('Failed to derive API key for Polymarket');
             }
 
-            const res = await this.polymarketPostOrder(signer, orderData, orderType, creds, config)
+            const res = await this.polymarketPostOrder(address, orderData, orderType, creds, config)
             if (res.error) {
                 throw new Error(`polymarketPostOrder error: ${res.error}`)
             } else {
@@ -616,7 +616,8 @@ export class TransactionAPI extends API {
     }
 
     private async polymarketPostOrder<T extends OrderType = OrderType.GTC>(
-        signer: any, order: SignedOrder,
+        address: string,
+        order: SignedOrder,
         orderType: T = OrderType.GTC as T,
         creds: ApiKeyCreds, config: SendConfig
     ): Promise<any> {
@@ -634,7 +635,7 @@ export class TransactionAPI extends API {
         };
 
         const headers = await createL2Headers(
-            signer as Wallet | JsonRpcSigner,
+            address,
             creds as ApiKeyCreds,
             l2HeaderArgs,
         );

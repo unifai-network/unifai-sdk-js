@@ -16,11 +16,6 @@ export async function deriveApiKey(address: string, signer: any): Promise<ApiKey
 
     try {
         const endpoint = `${polymarketClobUrl}${DERIVE_API_KEY}`;
-        if (!signer.getAddress) {
-            signer.getAddress = async () => {
-                return address
-            }
-        }
 
         const headers = await createL1Headers(address, signer, chainId,);
 
@@ -126,11 +121,6 @@ async function createApiKey(address: string, signer: any): Promise<ApiKeyCreds> 
     const CREATE_API_KEY = "/auth/api-key";
 
     const endpoint = `${polymarketClobUrl}${CREATE_API_KEY}`;
-    if (!signer.getAddress) {
-        signer.getAddress = async () => {
-            return address
-        }
-    }
 
     const headers = await createL1Headers(address, signer, chainId,);
 
