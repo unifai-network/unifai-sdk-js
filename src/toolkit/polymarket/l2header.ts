@@ -20,7 +20,7 @@ export interface L2PolyHeader extends AxiosRequestHeaders {
 }
 
 export const createL2Headers = async (
-    signer: Wallet | JsonRpcSigner,
+    address: string,
     creds: ApiKeyCreds,
     l2HeaderArgs: L2HeaderArgs,
     timestamp?: number,
@@ -29,7 +29,6 @@ export const createL2Headers = async (
     if (timestamp !== undefined) {
         ts = timestamp;
     }
-    const address = await signer.getAddress();
 
     const sig = buildPolyHmacSignature(
         creds.secret,
