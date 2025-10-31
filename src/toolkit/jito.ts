@@ -1,11 +1,13 @@
 import * as web3 from '@solana/web3.js';
 import { JitoJsonRpcClient } from 'jito-js-rpc';
 import { SolanaSigner } from './types';
+import { RateLimiter } from '../common/rate-limiter';
 
 export interface JitoConfig {
     jitoEndpoint?: string;
     apiKey?: string;
     tipAmount?: number;
+    rateLimiter?: RateLimiter;
 }
 
 export const JITO_CONSTANTS = {
@@ -19,14 +21,17 @@ export const JITO_CONSTANTS = {
 export class JitoClient {
     private client: JitoJsonRpcClient;
     private config: JitoConfig;
+    private rateLimiter?: RateLimiter;
 
     constructor(config: JitoConfig = {}) {
         this.config = {
             jitoEndpoint: config.jitoEndpoint || JITO_CONSTANTS.DEFAULT_ENDPOINT,
             apiKey: config.apiKey || JITO_CONSTANTS.DEFAULT_API_KEY,
             tipAmount: config.tipAmount || JITO_CONSTANTS.DEFAULT_TIP_AMOUNT,
+            rateLimiter: config.rateLimiter,
         };
-        
+
+        this.rateLimiter = config.rateLimiter;
         this.client = new JitoJsonRpcClient(this.config.jitoEndpoint!, this.config.apiKey!);
     }
 
@@ -48,6 +53,7 @@ export class JitoClient {
                 throw new Error(`Bundle size exceeds maximum of ${JITO_CONSTANTS.MAX_BUNDLE_SIZE} transactions`);
             }
 
+            await this.rateLimiter?.waitForLimit('jito_getRandomTipAccount');
             const randomTipAccount = await this.client.getRandomTipAccount();
             const jitoTipAccount = new web3.PublicKey(randomTipAccount);
             
@@ -92,12 +98,12 @@ export class JitoClient {
             // Sign all transactions (batch or individual)
             let signedTransactions: (web3.Transaction | web3.VersionedTransaction)[];
             if (signer.signAllTransactions && unsignedTransactions.length > 1) {
-                // Use signAllTransactions for batch signing when available
+                await this.rateLimiter?.waitForLimit('solana_signAllTransactions');
                 signedTransactions = await signer.signAllTransactions(unsignedTransactions);
             } else {
-                // Fallback to individual signing
                 signedTransactions = [];
                 for (const transaction of unsignedTransactions) {
+                    await this.rateLimiter?.waitForLimit('solana_signTransaction');
                     const signedTransaction = await signer.signTransaction(transaction);
                     signedTransactions.push(signedTransaction);
                 }
@@ -109,7 +115,7 @@ export class JitoClient {
                 return serializedTransaction.toString('base64');
             });
 
-            // Send the bundle
+            await this.rateLimiter?.waitForLimit('jito_sendBundle');
             const result = await this.client.sendBundle([base64SignedTransactions, { encoding: 'base64' }]);
             const bundleId = result.result;
 
@@ -117,7 +123,7 @@ export class JitoClient {
                 throw new Error('Failed to get bundle ID from Jito response');
             }
 
-            // Wait for confirmation
+            await this.rateLimiter?.waitForLimit('jito_confirmInflightBundle');
             const inflightStatus = await this.client.confirmInflightBundle(bundleId, JITO_CONSTANTS.BUNDLE_TIMEOUT);
             
             if ('confirmation_status' in inflightStatus && inflightStatus.confirmation_status === 'confirmed') {
@@ -131,7 +137,7 @@ export class JitoClient {
                         const waitTime = 1000 * Math.pow(2, attempt);
                         await new Promise(resolve => setTimeout(resolve, waitTime));
 
-                        // Get all transaction hashes from the bundle
+                        await this.rateLimiter?.waitForLimit('jito_getBundleStatuses');
                         const finalStatus = await this.client.getBundleStatuses([[bundleId]]);
 
                         if (finalStatus.result?.value?.[0]?.transactions) {
@@ -163,6 +169,7 @@ export class JitoClient {
     async sendSingleTransaction(transaction: any, signer: SolanaSigner, rpcUrls?: string[]): Promise<{ hash: string[] }> {
         try {
             const connection = this.getConnection(rpcUrls);
+            await this.rateLimiter?.waitForLimit('jito_getRandomTipAccount');
             const randomTipAccount = await this.client.getRandomTipAccount();
             const jitoTipAccount = new web3.PublicKey(randomTipAccount);
             
@@ -190,12 +197,12 @@ export class JitoClient {
                 tx = web3.VersionedTransaction.deserialize(transactionBuffer);
             }
 
-            // Sign the transaction
+            await this.rateLimiter?.waitForLimit('solana_signTransaction');
             const signedTransaction = await signer.signTransaction(tx);
             const serializedTransaction = Buffer.from(signedTransaction.serialize());
             const base64Transaction = serializedTransaction.toString('base64');
 
-            // Send using Jito's sendTxn method
+            await this.rateLimiter?.waitForLimit('jito_sendTxn');
             const result = await this.client.sendTxn([base64Transaction, { encoding: 'base64' }], false);
             const signature = result.result;
 
@@ -208,6 +215,7 @@ export class JitoClient {
             const maxRetries = 60; // 60 seconds
             
             while (retries < maxRetries) {
+                await this.rateLimiter?.waitForLimit('solana_getSignatureStatus');
                 const status = await connection.getSignatureStatus(signature);
                 if (status.value?.confirmationStatus === 'finalized' || status.value?.confirmationStatus === 'confirmed') {
                     return { hash: [signature] }; // Return as array for consistency

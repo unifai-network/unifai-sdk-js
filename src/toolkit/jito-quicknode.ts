@@ -1,5 +1,6 @@
 import * as web3 from '@solana/web3.js';
 import { SolanaSigner } from './types';
+import { RateLimiter } from '../common/rate-limiter';
 
 export interface QuickNodeJitoConfig {
     endpoint?: string;
@@ -7,6 +8,7 @@ export interface QuickNodeJitoConfig {
     pollIntervalMs?: number;
     pollTimeoutMs?: number;
     defaultWaitBeforePollMs?: number;
+    rateLimiter?: RateLimiter;
 }
 
 export const QUICKNODE_JITO_CONSTANTS = {
@@ -74,7 +76,7 @@ interface InflightBundleStatus {
 
 export class QuickNodeJitoClient {
     private config: QuickNodeJitoConfig;
-    private connection: web3.Connection;
+    private rateLimiter?: RateLimiter;
 
     constructor(config: QuickNodeJitoConfig = {}) {
         this.config = {
@@ -83,13 +85,14 @@ export class QuickNodeJitoClient {
             pollIntervalMs: config.pollIntervalMs || QUICKNODE_JITO_CONSTANTS.DEFAULT_POLL_INTERVAL_MS,
             pollTimeoutMs: config.pollTimeoutMs || QUICKNODE_JITO_CONSTANTS.DEFAULT_POLL_TIMEOUT_MS,
             defaultWaitBeforePollMs: config.defaultWaitBeforePollMs || QUICKNODE_JITO_CONSTANTS.DEFAULT_WAIT_BEFORE_POLL_MS,
+            rateLimiter: config.rateLimiter,
         };
+
+        this.rateLimiter = config.rateLimiter;
 
         if (!this.config.endpoint) {
             throw new Error('QuickNode endpoint is required');
         }
-
-        this.connection = new web3.Connection(this.config.endpoint, 'confirmed');
     }
 
     // Static method to create client with simplified config
@@ -110,6 +113,7 @@ export class QuickNodeJitoClient {
         const retryDelayMs = config?.retryDelayMs ?? QUICKNODE_JITO_CONSTANTS.DEFAULT_RPC_RETRY_DELAY_MS;
 
         for (let attempt = 0; attempt < retries; attempt++) {
+            await this.rateLimiter?.waitForLimit(`quicknode_${method}`);
             const response = await fetch(this.config.endpoint!, {
                 method: 'POST',
                 headers: {
@@ -279,12 +283,12 @@ export class QuickNodeJitoClient {
             // Sign all transactions (batch or individual)
             let signedTransactions: (web3.Transaction | web3.VersionedTransaction)[];
             if (signer.signAllTransactions && unsignedTransactions.length > 1) {
-                // Use signAllTransactions for batch signing when available
+                await this.rateLimiter?.waitForLimit('solana_signAllTransactions');
                 signedTransactions = await signer.signAllTransactions(unsignedTransactions);
             } else {
-                // Fallback to individual signing
                 signedTransactions = [];
                 for (const transaction of unsignedTransactions) {
+                    await this.rateLimiter?.waitForLimit('solana_signTransaction');
                     const signedTransaction = await signer.signTransaction(transaction);
                     signedTransactions.push(signedTransaction);
                 }

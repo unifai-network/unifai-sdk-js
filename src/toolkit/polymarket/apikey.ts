@@ -1,11 +1,12 @@
 import { ApiKeyCreds, Chain, L1PolyHeader } from "@polymarket/clob-client";
 import { get, post, RequestOptions } from '@polymarket/clob-client/dist/http-helpers'
 import { polymarketClobUrl, chainId } from './const';
+import { RateLimiter } from '../../common/rate-limiter';
 
 // In-memory cache for API keys, keyed by address
 const apiKeyCache = new Map<string, ApiKeyCreds>();
 
-export async function deriveApiKey(address: string, signer: any): Promise<ApiKeyCreds> {
+export async function deriveApiKey(address: string, signer: any, rateLimiter?: RateLimiter): Promise<ApiKeyCreds> {
     const cacheKey = address.toLowerCase();
     const cachedApiKey = apiKeyCache.get(cacheKey);
     if (cachedApiKey) {
@@ -17,12 +18,13 @@ export async function deriveApiKey(address: string, signer: any): Promise<ApiKey
     try {
         const endpoint = `${polymarketClobUrl}${DERIVE_API_KEY}`;
 
-        const headers = await createL1Headers(address, signer, chainId,);
+        const headers = await createL1Headers(address, signer, chainId, rateLimiter);
 
+        await rateLimiter?.waitForLimit('polymarket_deriveApiKey');
         let apiKeyRaw = await myGet(endpoint, { headers })
 
         if (!apiKeyRaw || !apiKeyRaw.apiKey || !apiKeyRaw.secret || !apiKeyRaw.passphrase) {
-            const apiKey = await createApiKey(address, signer)
+            const apiKey = await createApiKey(address, signer, rateLimiter)
             if (!apiKey) {
                 throw new Error(`fetch api key failed, response: ${JSON.stringify(apiKey)}`);
             }
@@ -45,11 +47,11 @@ export async function deriveApiKey(address: string, signer: any): Promise<ApiKey
     }
 }
 
-async function createL1Headers(address: string, signer: any, chainId: Chain,): Promise<L1PolyHeader> {
+async function createL1Headers(address: string, signer: any, chainId: Chain, rateLimiter?: RateLimiter): Promise<L1PolyHeader> {
     let ts = Math.floor(Date.now() / 1000);
     let n = 0; // Default nonce is 0
 
-    const sig = await buildClobEip712Signature(address, signer, chainId, ts, n);
+    const sig = await buildClobEip712Signature(address, signer, chainId, ts, n, rateLimiter);
 
     const headers = {
         POLY_ADDRESS: address,
@@ -61,7 +63,7 @@ async function createL1Headers(address: string, signer: any, chainId: Chain,): P
 };
 
 async function buildClobEip712Signature(address: string, signer: any,
-    chainId: Chain, timestamp: number, nonce: number): Promise<string> {
+    chainId: Chain, timestamp: number, nonce: number, rateLimiter?: RateLimiter): Promise<string> {
     const MSG_TO_SIGN = "This message attests that I control the given wallet";
     const ts = `${timestamp}`;
 
@@ -88,12 +90,20 @@ async function buildClobEip712Signature(address: string, signer: any,
 
     try {
         let sig: any
+        await rateLimiter?.waitForLimit('evm_signTypedData');
         if (signer.signTypedData.length == 3) {
-            sig = await signer.signTypedData(domain, types, value);
+            sig = await signer.signTypedData(
+                domain,
+                types,
+                value,
+            );
         } else {
             sig = await signer.signTypedData({
-                account: address, domain, types,
-                message: value, primaryType: 'ClobAuth'
+                account: address,
+                domain,
+                types,
+                message: value,
+                primaryType: 'ClobAuth',
             });
         }
 
@@ -117,13 +127,14 @@ async function myPost(endpoint: string, options?: RequestOptions) {
     });
 }
 
-async function createApiKey(address: string, signer: any): Promise<ApiKeyCreds> {
+async function createApiKey(address: string, signer: any, rateLimiter?: RateLimiter): Promise<ApiKeyCreds> {
     const CREATE_API_KEY = "/auth/api-key";
 
     const endpoint = `${polymarketClobUrl}${CREATE_API_KEY}`;
 
-    const headers = await createL1Headers(address, signer, chainId,);
+    const headers = await createL1Headers(address, signer, chainId, rateLimiter);
 
+    await rateLimiter?.waitForLimit('polymarket_createApiKey');
     const apiKeyRaw = await myPost(endpoint, { headers })
     if (!apiKeyRaw || !apiKeyRaw.apiKey || !apiKeyRaw.secret || !apiKeyRaw.passphrase) {
         throw new Error(`create api key failed, apiKeyRaw: ${JSON.stringify(apiKeyRaw)}`);
