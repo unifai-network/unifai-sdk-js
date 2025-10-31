@@ -6,8 +6,6 @@ import * as web3 from '@solana/web3.js';
 import { OrderType, ApiKeyCreds, } from "@polymarket/clob-client";
 import { SignedOrder } from "@polymarket/order-utils";
 import { orderToJson } from "@polymarket/clob-client/dist/utilities";
-import { JsonRpcSigner } from "@ethersproject/providers";
-import { Wallet } from "@ethersproject/wallet";
 import { deriveApiKey } from "./polymarket/apikey"
 import { createL2Headers } from "./polymarket/l2header"
 import { createJitoClient, shouldUseJito, JitoConfig, JITO_CONSTANTS, JitoClient } from './jito';
@@ -42,7 +40,7 @@ export class TransactionAPI extends API {
         let buildBody = { txId, address };
         let data = await this.request('POST', `/tx/build`, { json: buildBody, timeout: 60000 });
         if (!data.success) {
-            throw data.error
+            throw new Error(`Build transaction failed: ${data.error}`)
         }
         return data
     }
@@ -53,13 +51,13 @@ export class TransactionAPI extends API {
         if (data.success || data.message === 'Transaction completed successfully') {
             return data;
         }
-        throw new Error(data.error || 'Transaction completion failed');
+        throw new Error(`Complete transaction failed: ${data.error}`)
     }
 
     public async getTransaction(txId: string) {
         let data = await this.request('GET', `/tx/get/${txId}`);
         if (data.error) {
-            throw new Error(data.error)
+            throw new Error(`Get transaction failed: ${data.error}`)
         }
         return data
     }
@@ -332,19 +330,19 @@ export class TransactionAPI extends API {
                 jitoEndpoint: config?.jitoEndpoint,
                 apiKey: config?.jitoApiKey,
                 tipAmount: config?.jitoTipAmount,
+                rateLimiter: this.rateLimiter,
             };
             return createJitoClient(jitoConfig);
         } else {
-            // For QuickNode: use jitoEndpoint if set, otherwise find QuickNode RPC from rpcUrls
             let endpoint = config?.jitoEndpoint;
             if (!endpoint && config?.rpcUrls?.length) {
-                // Try to find a QuickNode URL
                 endpoint = config.rpcUrls.find(url => url.includes('quiknode.pro'));
             }
 
             const quickNodeConfig: QuickNodeJitoConfig = {
                 endpoint: endpoint,
                 tipAmount: config?.jitoTipAmount,
+                rateLimiter: this.rateLimiter,
             };
             return createQuickNodeJitoClient(quickNodeConfig);
         }
@@ -390,6 +388,7 @@ export class TransactionAPI extends API {
                 let txResponse: any;
                 let hash: string;
                 try {
+                    await this.rateLimiter?.waitForLimit('evm_sendTransaction');
                     txResponse = await signer.sendTransaction(txParams);
                     hash = typeof txResponse === 'string' ? txResponse : txResponse.hash;
                     if (!hash) {
@@ -403,6 +402,7 @@ export class TransactionAPI extends API {
                 if (isWagmiSigner(signer)) {
                     const s = signer as WagmiSigner
                     if (s.waitForTransactionReceipt) {
+                        await this.rateLimiter?.waitForLimit('evm_waitForTransactionReceipt');
                         receipt = await s.waitForTransactionReceipt({ hash });
                         if (receipt.status != 'success') {
                             throw new Error('transaction reverted')
@@ -410,6 +410,7 @@ export class TransactionAPI extends API {
                     }
                 } else if (isEtherSigner(signer)) {
                     if (typeof txResponse.wait === 'function') {
+                        await this.rateLimiter?.waitForLimit('evm_waitForTransactionReceipt');
                         receipt = await txResponse.wait()
                         if (!receipt || receipt.status == 0) {
                             throw new Error('transaction reverted')
@@ -445,6 +446,7 @@ export class TransactionAPI extends API {
                 transaction = web3.VersionedTransaction.deserialize(transactionBuffer);
             }
 
+            await this.rateLimiter?.waitForLimit('solana_signTransaction');
             const signedTransaction = await signer.signTransaction(transaction);
 
             const serializedTransaction = Buffer.from(signedTransaction.serialize());
@@ -458,6 +460,7 @@ export class TransactionAPI extends API {
             for (const rpcUrl of rpcUrls) {
                 try {
                     connection = new web3.Connection(rpcUrl, 'confirmed');
+                    await this.rateLimiter?.waitForLimit('solana_sendRawTransaction');
                     signature = await connection.sendRawTransaction(serializedTransaction);
                     if (signature) {
                         successfulTransactions.push({
@@ -523,6 +526,7 @@ export class TransactionAPI extends API {
 
             let err: any = null;
             try {
+                await this.rateLimiter?.waitForLimit('solana_getSignatureStatus');
                 const status = await connection.getSignatureStatus(signature, {
                     searchTransactionHistory: true,
                 })
@@ -545,8 +549,10 @@ export class TransactionAPI extends API {
         signature: string,
         signedTransaction: any,
     ): Promise<any> {
+        await this.rateLimiter?.waitForLimit('solana_getLatestBlockhash');
         const blockhash = await connection.getLatestBlockhash();
         if (signedTransaction instanceof web3.Transaction) {
+            await this.rateLimiter?.waitForLimit('solana_confirmTransaction');
             return await connection.confirmTransaction(
                 {
                     signature: signature,
@@ -557,6 +563,7 @@ export class TransactionAPI extends API {
                 'confirmed',
             );
         } else {
+            await this.rateLimiter?.waitForLimit('solana_confirmTransaction');
             return await connection.confirmTransaction(
                 {
                     signature: signature,
@@ -580,8 +587,9 @@ export class TransactionAPI extends API {
             const { signature: existingSignature, ...cleanOrderData } = orderData;
             let signature: string;
 
-            if (isWagmiSigner(signer)) { // wagmi wallet
+            if (isWagmiSigner(signer)) {
                 const s = signer as WagmiSigner
+                await this.rateLimiter?.waitForLimit('evm_signTypedData');
                 signature = await s.signTypedData({
                     account: s.account,
                     domain: typedData.domain,
@@ -589,16 +597,21 @@ export class TransactionAPI extends API {
                     primaryType: typedData.primaryType,
                     message: cleanOrderData
                 });
-            } else if (signer.signTypedData) { // ethers wallet
+            } else if (signer.signTypedData) {
                 const typesCopy = { ...typedData.types };
                 delete typesCopy.EIP712Domain;
-                signature = await signer.signTypedData(typedData.domain, typesCopy, cleanOrderData);
+                await this.rateLimiter?.waitForLimit('evm_signTypedData');
+                signature = await signer.signTypedData(
+                    typedData.domain,
+                    typesCopy,
+                    cleanOrderData,
+                );
             } else {
                 throw new Error("Signer doesn't have signTypedData");
             }
             orderData.signature = signature;
 
-            const creds = await deriveApiKey(address, signer)
+            const creds = await deriveApiKey(address, signer, this.rateLimiter)
             if (!creds) {
                 throw new Error('Failed to derive API key for Polymarket');
             }
@@ -651,12 +664,14 @@ export class TransactionAPI extends API {
         try {
             const order = JSON.parse(tx.order);
 
+            await this.rateLimiter?.waitForLimit('evm_signTypedData');
             const signature = await signL1Action({
                 wallet: signer,
                 action: order.action,
                 nonce: order.nonce,
             });
 
+            await this.rateLimiter?.waitForLimit('hyperliquid_exchange');
             const response = await fetch(url, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },

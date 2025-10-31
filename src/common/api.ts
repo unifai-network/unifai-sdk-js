@@ -1,8 +1,10 @@
 import urljoin from 'url-join';
+import { RateLimiter, RateLimitGroups } from './rate-limiter';
 
 export interface APIConfig {
   apiKey?: string;
   endpoint?: string;
+  rateLimiterGroups?: RateLimitGroups;
 }
 
 export class APIError extends Error {
@@ -20,10 +22,16 @@ export class APIError extends Error {
 export class API {
   protected apiKey: string;
   protected apiUri: string;
+  protected rateLimiter?: RateLimiter;
 
   constructor(config: APIConfig) {
     this.apiKey = config.apiKey || '';
     this.apiUri = config.endpoint || '';
+
+    // Initialize rate limiter if config is provided
+    if (config.rateLimiterGroups) {
+      this.rateLimiter = new RateLimiter(config.rateLimiterGroups);
+    }
   }
 
   public setEndpoint(endpoint: string): void {
@@ -38,10 +46,13 @@ export class API {
       headers?: Record<string, any>;
       params?: Record<string, any>;
       json?: any;
+      rateLimitEndpoint?: string;
       [key: string]: any;
     } = {}
   ): Promise<any> {
-    const { timeout = 10000, headers = {}, params, json, ...rest } = options;
+    const { timeout = 10000, headers = {}, params, json, rateLimitEndpoint, ...rest } = options;
+
+    await this.rateLimiter?.waitForLimit(rateLimitEndpoint || path);
 
     if (!headers['Authorization'] && this.apiKey) {
       headers['Authorization'] = this.apiKey;
