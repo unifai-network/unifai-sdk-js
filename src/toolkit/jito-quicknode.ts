@@ -97,14 +97,7 @@ export class QuickNodeJitoClient {
 
     // Static method to create client with simplified config
     static createWithDefaults(config: Partial<QuickNodeJitoConfig> = {}): QuickNodeJitoClient {
-        const fullConfig: QuickNodeJitoConfig = {
-            endpoint: config.endpoint,
-            tipAmount: config.tipAmount,
-            pollIntervalMs: config.pollIntervalMs,
-            pollTimeoutMs: config.pollTimeoutMs,
-            defaultWaitBeforePollMs: config.defaultWaitBeforePollMs,
-        };
-        return new QuickNodeJitoClient(fullConfig);
+        return new QuickNodeJitoClient({ ...config });
     }
 
 
