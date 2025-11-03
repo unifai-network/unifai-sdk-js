@@ -1,8 +1,5 @@
-import { JsonRpcSigner } from "@ethersproject/providers";
-import { Wallet } from "@ethersproject/wallet";
 import { ApiKeyCreds } from "@polymarket/clob-client";
 import crypto from "crypto";
-import { AxiosRequestHeaders } from "axios";
 
 export interface L2HeaderArgs {
     method: string;
@@ -11,7 +8,7 @@ export interface L2HeaderArgs {
 }
 
 // API key verification
-export interface L2PolyHeader extends AxiosRequestHeaders {
+export interface L2PolyHeader {
     POLY_ADDRESS: string;
     POLY_SIGNATURE: string;
     POLY_TIMESTAMP: string;
