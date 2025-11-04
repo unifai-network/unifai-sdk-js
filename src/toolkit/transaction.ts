@@ -126,7 +126,7 @@ export class TransactionAPI extends API {
                 switch (tx.chain) {
                     case 'polygon': // Polygon Mainnet
                         switch (tx.name) {
-                            case 'MarketOrder':
+                            case 'Order':
                                 let conf: SendConfig = config || {}
                                 if (!config || !config.proxyUrl) { // if not set, then use apiUri, it's transaction builder.
                                     conf.proxyUrl = this.apiUri
