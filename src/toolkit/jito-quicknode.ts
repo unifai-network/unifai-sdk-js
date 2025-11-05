@@ -131,11 +131,35 @@ export class QuickNodeJitoClient {
                     continue;
                 }
 
-                throw new Error(`HTTP error! status: ${response.status}`);
+                // Enhanced error with response details
+                let errorMessage = `HTTP error! status: ${response.status}`;
+                if (response.statusText) {
+                    errorMessage += ` ${response.statusText}`;
+                }
+                if (data) {
+                    try {
+                        errorMessage += ` | Response: ${JSON.stringify(data)}`;
+                    } catch {
+                        errorMessage += ` | Response: ${String(data)}`;
+                    }
+                }
+                throw new Error(errorMessage);
             }
 
             if (data.error) {
-                throw new Error(`RPC error: ${data.error.message}`);
+                // Enhanced RPC error with more details
+                let errorMessage = `RPC error: ${data.error.message || 'Unknown RPC error'}`;
+                if (data.error.code) {
+                    errorMessage += ` | Code: ${data.error.code}`;
+                }
+                if (data.error.data) {
+                    try {
+                        errorMessage += ` | Data: ${JSON.stringify(data.error.data)}`;
+                    } catch {
+                        errorMessage += ` | Data: ${String(data.error.data)}`;
+                    }
+                }
+                throw new Error(errorMessage);
             }
 
             return data.result;
@@ -223,6 +247,7 @@ export class QuickNodeJitoClient {
     }
 
     async sendBundle(transactions: any[], signer: SolanaSigner): Promise<{ hash: string[] }> {
+        let currentStep = 'initialization';
         try {
             if (transactions.length === 0) {
                 throw new Error('No transactions to bundle');
@@ -232,15 +257,17 @@ export class QuickNodeJitoClient {
                 throw new Error(`Bundle size exceeds maximum of ${QUICKNODE_JITO_CONSTANTS.MAX_BUNDLE_SIZE} transactions`);
             }
 
+            currentStep = 'getting tip account';
             // Get a random tip account
             const jitoTipAccount = new web3.PublicKey(await this.getTipAccount());
-            
+
             // Get signer's public key
             const signerPublicKey = new web3.PublicKey(signer.publicKey.toBase58());
 
+            currentStep = 'preparing transactions';
             // Prepare all transactions for signing
             const unsignedTransactions: (web3.Transaction | web3.VersionedTransaction)[] = [];
-            
+
             for (const tx of transactions) {
                 const transactionBuffer = new Uint8Array(
                     atob(tx.base64)
@@ -273,6 +300,7 @@ export class QuickNodeJitoClient {
                 unsignedTransactions.push(transaction);
             }
 
+            currentStep = 'signing transactions';
             // Sign all transactions (batch or individual)
             let signedTransactions: (web3.Transaction | web3.VersionedTransaction)[];
             if (signer.signAllTransactions && unsignedTransactions.length > 1) {
@@ -287,23 +315,28 @@ export class QuickNodeJitoClient {
                 }
             }
 
+            currentStep = 'serializing transactions';
             // Convert signed transactions to base64
             const base64SignedTransactions: string[] = signedTransactions.map(signedTx => {
                 const serializedTransaction = Buffer.from(signedTx.serialize());
                 return serializedTransaction.toString('base64');
             });
 
+            currentStep = 'simulating bundle';
             // Simulate the bundle first
             const simulation = await this.simulateBundle(base64SignedTransactions);
             this.validateSimulation(simulation);
 
+            currentStep = 'sending bundle to QuickNode Jito';
             // Send the bundle
             const bundleId = await this.sendBundleRpc(base64SignedTransactions);
             console.log(`Bundle sent with ID: ${bundleId}`);
 
+            currentStep = 'polling bundle status';
             // Poll for bundle status
             const success = await this.pollBundleStatus(bundleId);
-            
+
+            currentStep = 'retrieving transaction hashes';
             if (success) {
                 // Retry logic with exponential backoff to retrieve transaction hashes
                 const maxRetries = 3;
@@ -332,8 +365,51 @@ export class QuickNodeJitoClient {
                 throw new Error('Bundle failed to land');
             }
 
-        } catch (error) {
-            throw new Error(`Jito bundle send failed: ${error}`);
+        } catch (error: any) {
+            // Log stack trace for debugging (server-side logs only)
+            if (error && typeof error === 'object' && error.stack) {
+                console.error(`QuickNode Jito bundle error stack trace at step '${currentStep}':`, error.stack);
+            }
+
+            // Extract detailed error information for client
+            let errorDetails = '';
+
+            if (error && typeof error === 'object') {
+                // Try to capture response details from fetch errors
+                if (error.response) {
+                    errorDetails = `HTTP ${error.response.status || 'error'}`;
+                    if (error.response.statusText) {
+                        errorDetails += ` ${error.response.statusText}`;
+                    }
+                    if (error.response.data) {
+                        try {
+                            errorDetails += ` | Response: ${JSON.stringify(error.response.data)}`;
+                        } catch {
+                            errorDetails += ` | Response: ${String(error.response.data)}`;
+                        }
+                    }
+                }
+                // Capture error message
+                if (error.message) {
+                    errorDetails += errorDetails ? ` | ${error.message}` : error.message;
+                }
+                // Capture error code if present
+                if (error.code) {
+                    errorDetails += ` | Code: ${error.code}`;
+                }
+                // If we have a full error object, try to serialize it
+                if (!errorDetails && error !== null) {
+                    try {
+                        errorDetails = JSON.stringify(error);
+                    } catch {
+                        errorDetails = String(error);
+                    }
+                }
+            } else {
+                errorDetails = String(error);
+            }
+
+            throw new Error(`QuickNode Jito bundle send failed at step '${currentStep}': ${errorDetails}`);
         }
     }
 
