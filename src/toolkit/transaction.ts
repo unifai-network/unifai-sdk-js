@@ -70,10 +70,33 @@ export class TransactionAPI extends API {
         const data = await this.request('POST', `/tx/sendtransaction`, {
             json: txData,
         })
-        if (!data.success) {
-            throw data.error
+
+        switch (chain) {
+            case 'polygon': {
+                switch (name) {
+                    case 'CancelOrder': {
+                        const notCanceled = data?.not_canceled;
+                        if (notCanceled && Object.keys(notCanceled).length > 0) {
+                            const reasons = Object.entries(notCanceled)
+                                .map(([orderId, reason]) => `${orderId}: ${reason}`)
+                                .join('; ');
+                            throw new Error(`Polymarket cancel failed: ${reasons}`);
+                        }
+                        return data;
+                    }
+                    case 'Order': {
+                        if (!data.success) {
+                            throw data.error || data.errorMsg || 'Transaction failed';
+                        }
+                        return data;
+                    }
+                    default:
+                        throw new Error(`Unsupported polygon transaction name: ${name}`);
+                }
+            }
+            default:
+                throw new Error(`Unsupported chain for sendTransaction: ${chain}`);
         }
-        return data
     }
 
     // Sign and Sends a transaction to blockchains.
@@ -133,6 +156,14 @@ export class TransactionAPI extends API {
                                 }
                                 res = await this.polymarketSendTransaction(signer as EtherSigner | WagmiSigner,
                                     tx, conf, address);
+                                break;
+                            case 'CancelOrder':
+                                let cancelConf: SendConfig = config || {}
+                                if (!config || !config.proxyUrl) {
+                                    cancelConf.proxyUrl = this.apiUri
+                                }
+                                res = await this.polymarketCancelOrder(signer as EtherSigner | WagmiSigner,
+                                    tx, cancelConf, address);
                                 break;
                             default:
                                 res = await this.evmSendTransaction(signer as EtherSigner | WagmiSigner, tx);
@@ -575,7 +606,10 @@ export class TransactionAPI extends API {
             let od = data.data
             let orderData = od.orderData
             let typedData = od.typedData
-            let orderType = od.orderType || OrderType.FAK; // FOK
+            let orderType = data.orderType
+            if(!orderType) {
+                throw new Error('orderType is required')
+            }
 
             const { signature: existingSignature, ...cleanOrderData } = orderData;
             let signature: string;
@@ -616,6 +650,57 @@ export class TransactionAPI extends API {
         }
     }
 
+    private async polymarketCancelOrder(
+        signer: EtherSigner | WagmiSigner,
+        tx: any,
+        config: SendConfig,
+        address: string,
+    ): Promise<{ hash: string | undefined, orderId?: string }> {
+        try {
+            if (!config.proxyUrl) {
+                throw new Error('polymarketCancelOrder needs to config proxy url.')
+            }
+
+            const data = JSON.parse(tx.hex);
+            const orderID: string | undefined = data?.data?.orderID;
+            if (!orderID) {
+                throw new Error('Cancel order payload missing orderID');
+            }
+
+            const creds: ApiKeyCreds = await deriveApiKey(address, signer);
+            if (!creds) {
+                throw new Error('Failed to derive API key for Polymarket');
+            }
+
+            const endpoint = "/order";
+            const cancelPayload = { orderID };
+
+            const l2HeaderArgs = {
+                method: "DELETE",
+                requestPath: endpoint,
+                body: JSON.stringify(cancelPayload),
+            };
+
+            const headers = await createL2Headers(
+                signer as unknown as Wallet | JsonRpcSigner,
+                creds,
+                l2HeaderArgs,
+            );
+
+            const payload = { headers, data: cancelPayload };
+            const res = await this.sendTransaction("polygon", "CancelOrder", payload);
+            if (res.error) {
+                throw new Error(`polymarketCancelOrder error: ${res.error}`)
+            }
+
+            const hash = res.transactionHash || res.transactionsHashes?.[0];
+            return { hash, orderId: orderID };
+            // return res as { hash: string[], orderId: string[] };
+        } catch (error) {
+            throw new Error(`polymarketCancelOrder: ${error}`);
+        }
+    }
+
     private async polymarketPostOrder<T extends OrderType = OrderType.GTC>(
         signer: any, order: SignedOrder,
         orderType: T = OrderType.GTC as T,
@@ -641,7 +726,7 @@ export class TransactionAPI extends API {
         );
 
         const data = { headers, data: orderPayload }
-        const res = await this.sendTransaction("polygon", "MarketOrder", data)
+        const res = await this.sendTransaction("polygon", "Order", data)
 
         return res
     }
