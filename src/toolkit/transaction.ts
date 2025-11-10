@@ -70,33 +70,28 @@ export class TransactionAPI extends API {
         const data = await this.request('POST', `/tx/sendtransaction`, {
             json: txData,
         })
-
-        switch (chain) {
-            case 'polygon': {
-                switch (name) {
-                    case 'CancelOrder': {
-                        const notCanceled = data?.not_canceled;
-                        if (notCanceled && Object.keys(notCanceled).length > 0) {
-                            const reasons = Object.entries(notCanceled)
-                                .map(([orderId, reason]) => `${orderId}: ${reason}`)
-                                .join('; ');
-                            throw new Error(`Polymarket cancel failed: ${reasons}`);
-                        }
-                        return data;
-                    }
-                    case 'Order': {
-                        if (!data.success) {
-                            throw data.error || data.errorMsg || 'Transaction failed';
-                        }
-                        return data;
-                    }
-                    default:
-                        throw new Error(`Unsupported polygon transaction name: ${name}`);
-                }
-            }
-            default:
-                throw new Error(`Unsupported chain for sendTransaction: ${chain}`);
+        if (!data.success) {
+            throw data.error || data.errorMsg || 'Transaction failed';
         }
+        return data;
+    }
+
+    public async sendPolymarketCancelOrderTransaction(chain: string, name: string, txData: any) {
+        txData.chain = chain
+        txData.name = name
+        const data = await this.request('POST', `/tx/sendtransaction`, {
+            json: txData,
+        })
+
+        const notCanceled = data?.not_canceled;
+        if (notCanceled && Object.keys(notCanceled).length > 0) {
+            const reasons = Object.entries(notCanceled)
+                .map(([orderId, reason]) => `${orderId}: ${reason}`)
+                .join('; ');
+            throw new Error(`Polymarket cancel failed: ${reasons}`);
+        }
+        return data;
+
     }
 
     // Sign and Sends a transaction to blockchains.
@@ -149,7 +144,8 @@ export class TransactionAPI extends API {
                 switch (tx.chain) {
                     case 'polygon': // Polygon Mainnet
                         switch (tx.name) {
-                            case 'Order':
+                            case 'LimitOrder':
+                            case 'MarketOrder':
                                 let conf: SendConfig = config || {}
                                 if (!config || !config.proxyUrl) { // if not set, then use apiUri, it's transaction builder.
                                     conf.proxyUrl = this.apiUri
@@ -606,10 +602,7 @@ export class TransactionAPI extends API {
             let od = data.data
             let orderData = od.orderData
             let typedData = od.typedData
-            let orderType = data.orderType
-            if(!orderType) {
-                throw new Error('orderType is required')
-            }
+            let orderType = data.orderType || OrderType.FAK; // FOK
 
             const { signature: existingSignature, ...cleanOrderData } = orderData;
             let signature: string;
@@ -688,7 +681,7 @@ export class TransactionAPI extends API {
             );
 
             const payload = { headers, data: cancelPayload };
-            const res = await this.sendTransaction("polygon", "CancelOrder", payload);
+            const res = await this.sendPolymarketCancelOrderTransaction("polygon", "CancelOrder", payload);
             if (res.error) {
                 throw new Error(`polymarketCancelOrder error: ${res.error}`)
             }
@@ -725,8 +718,9 @@ export class TransactionAPI extends API {
             l2HeaderArgs,
         );
 
+        const isMarketOrder = orderType === OrderType.FAK || orderType === OrderType.FOK;
         const data = { headers, data: orderPayload }
-        const res = await this.sendTransaction("polygon", "Order", data)
+        const res = await this.sendTransaction("polygon", isMarketOrder ? "MarketOrder" : "LimitOrder", data)
 
         return res
     }
