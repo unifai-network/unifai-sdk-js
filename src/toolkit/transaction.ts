@@ -71,9 +71,9 @@ export class TransactionAPI extends API {
             json: txData,
         })
         if (!data.success) {
-            throw data.error || data.errorMsg || 'Transaction failed';
+            throw data.error
         }
-        return data;
+        return data
     }
 
     public async sendPolymarketCancelOrderTransaction(chain: string, name: string, txData: any) {
