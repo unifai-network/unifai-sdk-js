@@ -4,7 +4,6 @@ import { WagmiSigner, EtherSigner, SolanaSigner, SendConfig, isEtherSigner, isSo
 import { ethers, toBeHex } from "ethers";
 import * as web3 from '@solana/web3.js';
 import { OrderType, ApiKeyCreds, } from "@polymarket/clob-client";
-import { SignedOrder } from "@polymarket/order-utils";
 import { orderToJson } from "@polymarket/clob-client/dist/utilities";
 import { deriveApiKey } from "./polymarket/apikey"
 import { createL2Headers } from "./polymarket/l2header"
@@ -74,24 +73,6 @@ export class TransactionAPI extends API {
         return data
     }
 
-    public async sendPolymarketCancelOrderTransaction(chain: string, name: string, txData: any) {
-        txData.chain = chain
-        txData.name = name
-        const data = await this.request('POST', `/tx/sendtransaction`, {
-            json: txData,
-        })
-
-        const notCanceled = data?.not_canceled;
-        if (notCanceled && Object.keys(notCanceled).length > 0) {
-            const reasons = Object.entries(notCanceled)
-                .map(([orderId, reason]) => `${orderId}: ${reason}`)
-                .join('; ');
-            throw new Error(`Polymarket cancel failed: ${reasons}`);
-        }
-        return data;
-
-    }
-
     // Sign and Sends a transaction to blockchains.
     public async signAndSendTransaction(txId: string, signer: Signer, config?: SendConfig):
         Promise<{ hash?: string[], error?: any }> {
@@ -144,20 +125,18 @@ export class TransactionAPI extends API {
                         switch (tx.name) {
                             case 'LimitOrder':
                             case 'MarketOrder':
-                                let conf: SendConfig = config || {}
-                                if (!config || !config.proxyUrl) { // if not set, then use apiUri, it's transaction builder.
-                                    conf.proxyUrl = this.apiUri
-                                }
-                                res = await this.polymarketSendTransaction(signer as EtherSigner | WagmiSigner,
-                                    tx, conf, address);
+                                res = await this.polymarketSendOrderTransaction(
+                                    signer as EtherSigner | WagmiSigner,
+                                    tx,
+                                    address,
+                                );
                                 break;
                             case 'CancelOrder':
-                                let cancelConf: SendConfig = config || {}
-                                if (!config || !config.proxyUrl) {
-                                    cancelConf.proxyUrl = this.apiUri
-                                }
-                                res = await this.polymarketCancelOrder(signer as EtherSigner | WagmiSigner,
-                                    tx, cancelConf, address);
+                                res = await this.polymarketSendCancelOrderTransaction(
+                                    signer as EtherSigner | WagmiSigner,
+                                    tx,
+                                    address,
+                                );
                                 break;
                             default:
                                 res = await this.evmSendTransaction(signer as EtherSigner | WagmiSigner, tx);
@@ -602,8 +581,18 @@ export class TransactionAPI extends API {
         }
     }
 
-    private async polymarketSendTransaction(signer: EtherSigner | WagmiSigner, tx: any,
-        config: SendConfig, address: string): Promise<{ hash: string | undefined, orderId?: string }> {
+    /**
+     * Sends a Polymarket order transaction (limit or market order)
+     * @param signer - The EVM signer to use for signing typed data
+     * @param tx - Transaction data containing order details and typed data
+     * @param address - The user's wallet address
+     * @returns Promise with transaction hash and order ID
+     */
+    private async polymarketSendOrderTransaction(
+        signer: EtherSigner | WagmiSigner,
+        tx: any,
+        address: string,
+    ): Promise<{ hash: string | undefined, orderId?: string }> {
         try {
             let data = JSON.parse(tx.hex)
             let od = data.data
@@ -643,36 +632,59 @@ export class TransactionAPI extends API {
                 throw new Error('Failed to derive API key for Polymarket');
             }
 
-            const res = await this.polymarketPostOrder(address, orderData, orderType, creds, config)
+            const endpoint = "/order"
+            const orderPayload = orderToJson(orderData, creds?.key || "", orderType);
+
+            const l2HeaderArgs = {
+                method: "POST",
+                requestPath: endpoint,
+                body: JSON.stringify(orderPayload),
+            };
+
+            const headers = await createL2Headers(
+                address,
+                creds as ApiKeyCreds,
+                l2HeaderArgs,
+            );
+
+            const isMarketOrder = orderType === OrderType.FAK || orderType === OrderType.FOK;
+            const res = await this.sendTransaction(
+                "polymarket",
+                isMarketOrder ? "MarketOrder" : "LimitOrder",
+                { headers, data: orderPayload }
+            );
+
             if (res.error) {
-                throw new Error(`polymarketPostOrder error: ${res.error}`)
-            } else {
-                let hash = res.transactionHash || res.transactionsHashes?.[0]
-                return { hash: hash, orderId: res.orderId } // orderId is polymarket specific
+                throw new Error(`polymarket send transaction error: ${res.error}`)
             }
+
+            const hash = res.transactionHash || res.transactionsHashes?.[0]
+            return { hash: hash, orderId: res.orderId } // orderId is polymarket specific
         } catch (error) {
-            throw new Error(`polymarketSendTransaction: ${error}`)
+            throw new Error(`polymarketSendOrderTransaction: ${error}`)
         }
     }
 
-    private async polymarketCancelOrder(
+    /**
+     * Sends a Polymarket cancel order transaction
+     * @param signer - The EVM signer to use for deriving API credentials
+     * @param tx - Transaction data containing the order ID to cancel
+     * @param address - The user's wallet address
+     * @returns Promise with transaction hash and order ID
+     */
+    private async polymarketSendCancelOrderTransaction(
         signer: EtherSigner | WagmiSigner,
         tx: any,
-        config: SendConfig,
         address: string,
     ): Promise<{ hash: string | undefined, orderId?: string }> {
         try {
-            if (!config.proxyUrl) {
-                throw new Error('polymarketCancelOrder needs to config proxy url.')
-            }
-
             const data = JSON.parse(tx.hex);
             const orderID: string | undefined = data?.data?.orderID;
             if (!orderID) {
                 throw new Error('Cancel order payload missing orderID');
             }
 
-            const creds: ApiKeyCreds = await deriveApiKey(address, signer);
+            const creds: ApiKeyCreds = await deriveApiKey(address, signer, this.rateLimiter);
             if (!creds) {
                 throw new Error('Failed to derive API key for Polymarket');
             }
@@ -687,55 +699,34 @@ export class TransactionAPI extends API {
             };
 
             const headers = await createL2Headers(
-                signer as unknown as Wallet | JsonRpcSigner,
-                creds,
+                address,
+                creds as ApiKeyCreds,
                 l2HeaderArgs,
             );
 
-            const payload = { headers, data: cancelPayload };
-            const res = await this.sendPolymarketCancelOrderTransaction("polygon", "CancelOrder", payload);
+            const res = await this.sendTransaction(
+                "polymarket",
+                "CancelOrder",
+                { headers, data: cancelPayload },
+            );
             if (res.error) {
-                throw new Error(`polymarketCancelOrder error: ${res.error}`)
+                throw new Error(`polymarket send transaction error: ${res.error}`)
+            }
+
+            // Check for orders that failed to cancel
+            const notCanceled = res?.not_canceled;
+            if (notCanceled && Object.keys(notCanceled).length > 0) {
+                const reasons = Object.entries(notCanceled)
+                    .map(([orderId, reason]) => `${orderId}: ${reason}`)
+                    .join('; ');
+                throw new Error(`Polymarket cancel failed: ${reasons}`);
             }
 
             const hash = res.transactionHash || res.transactionsHashes?.[0];
             return { hash, orderId: orderID };
-            // return res as { hash: string[], orderId: string[] };
         } catch (error) {
-            throw new Error(`polymarketCancelOrder: ${error}`);
+            throw new Error(`polymarketSendCancelOrderTransaction: ${error}`);
         }
-    }
-
-    private async polymarketPostOrder<T extends OrderType = OrderType.GTC>(
-        address: string,
-        order: SignedOrder,
-        orderType: T = OrderType.GTC as T,
-        creds: ApiKeyCreds, config: SendConfig
-    ): Promise<any> {
-        if (!config.proxyUrl) {
-            throw new Error('polymarketSendTransaction needs to config proxy url.')
-        }
-
-        const endpoint = "/order"
-        const orderPayload = orderToJson(order, creds?.key || "", orderType);
-
-        const l2HeaderArgs = {
-            method: "POST",
-            requestPath: endpoint,
-            body: JSON.stringify(orderPayload),
-        };
-
-        const headers = await createL2Headers(
-            address,
-            creds as ApiKeyCreds,
-            l2HeaderArgs,
-        );
-
-        const isMarketOrder = orderType === OrderType.FAK || orderType === OrderType.FOK;
-        const data = { headers, data: orderPayload }
-        const res = await this.sendTransaction("polygon", isMarketOrder ? "MarketOrder" : "LimitOrder", data)
-
-        return res
     }
 
     private async hyperliquidSendTransaction(signer: EtherSigner | WagmiSigner, tx: any): Promise<{ hash: string | undefined }> {
