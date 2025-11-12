@@ -23,7 +23,6 @@ export type PolymarketOpenOrdersHexPayload = {
 };
 
 export type PolymarketOpenOrdersProxyRequest = {
-    headers: L2PolyHeader;
     params?: PolymarketOpenOrdersRequestParams;
     onlyFirstPage?: boolean;
     nextCursor?: string;

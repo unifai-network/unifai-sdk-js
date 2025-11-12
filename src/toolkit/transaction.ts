@@ -801,13 +801,11 @@ export class TransactionAPI extends API {
                 l2HeaderArgs,
             );
 
-            const requestPayload: PolymarketOpenOrdersProxyRequest = {
-                headers,
+            const requestPayload = {
+                params,
+                onlyFirstPage,
+                nextCursor,
             };
-
-            requestPayload.params = params;
-            requestPayload.onlyFirstPage = onlyFirstPage;
-            requestPayload.nextCursor = nextCursor;
 
             await this.rateLimiter?.waitForLimit('polymarket_getOpenOrders');
             const res = await this.sendTransaction(
