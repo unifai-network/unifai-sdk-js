@@ -3,10 +3,11 @@ import { ActionContext } from './context';
 import { WagmiSigner, EtherSigner, SolanaSigner, SendConfig, isEtherSigner, isSolanaSigner, isWagmiSigner, Signer } from './types';
 import { ethers, toBeHex } from "ethers";
 import * as web3 from '@solana/web3.js';
-import { OrderType, ApiKeyCreds, } from "@polymarket/clob-client";
+import { OrderType, ApiKeyCreds, OpenOrder } from "@polymarket/clob-client";
 import { orderToJson } from "@polymarket/clob-client/dist/utilities";
 import { deriveApiKey } from "./polymarket/apikey"
 import { createL2Headers } from "./polymarket/l2header"
+import { PolymarketOpenOrdersHexPayload, PolymarketOpenOrdersProxyRequest, PolymarketOpenOrdersRequestParams, PolymarketOpenOrdersResult } from "./polymarket/types";
 import { createJitoClient, shouldUseJito, JitoConfig, JITO_CONSTANTS, JitoClient } from './jito';
 import { createQuickNodeJitoClient, QuickNodeJitoConfig, QuickNodeJitoClient } from './jito-quicknode';
 import { getSolanaErrorInfo } from './solana-errors';
@@ -75,7 +76,7 @@ export class TransactionAPI extends API {
 
     // Sign and Sends a transaction to blockchains.
     public async signAndSendTransaction(txId: string, signer: Signer, config?: SendConfig):
-        Promise<{ hash?: string[], error?: any }> {
+        Promise<{ hash?: string[], error?: any, data?: any }> {
         let address = await this.getAddress(signer);
 
         let data = config?.txData || await this.buildTransaction(txId, signer);
@@ -109,10 +110,11 @@ export class TransactionAPI extends API {
             }
         }
 
-        let res;
+        let res: any;
         let hashes: string[] = [];
         let successful: Array<{ index: number, hash: string }> = [];
         let failed: Array<{ index: number, error: string }> = [];
+        let polymarketOpenOrdersResults: PolymarketOpenOrdersResult[] = [];
 
         // Determine onFailure behavior with priority: config.onFailure > data.onFailure > default (stop)
         const onFailure = config?.onFailure || data.onFailure || 'stop';
@@ -138,6 +140,13 @@ export class TransactionAPI extends API {
                                     address,
                                 );
                                 break;
+                            case 'GetOpenOrders':
+                                res = await this.polymarketGetOpenOrdersTransaction(
+                                    signer as EtherSigner | WagmiSigner,
+                                    tx,
+                                    address,
+                                );
+                                break;
                             default:
                                 res = await this.evmSendTransaction(signer as EtherSigner | WagmiSigner, tx);
                         }
@@ -156,6 +165,16 @@ export class TransactionAPI extends API {
                 if (res.hash) {
                     hashes.push(res.hash);
                     successful.push({ index: i, hash: res.hash });
+                }
+
+                const maybeOrders = res.openOrders as OpenOrder[] | undefined;
+                if (Array.isArray(maybeOrders)) {
+                    const cursorFromRes = res.nextCursor;
+                    polymarketOpenOrdersResults.push({
+                        index: i,
+                        orders: maybeOrders,
+                        nextCursor: cursorFromRes,
+                    });
                 }
 
                 // Only sleep if it's not the last transaction
@@ -192,6 +211,27 @@ export class TransactionAPI extends API {
             }
         }
 
+        const buildResult = (error?: any) => {
+            const result: { hash: string[], error?: any, data?: any } = {
+                hash: hashes,
+            };
+            if (error !== undefined) {
+                result.error = error;
+            }
+            if (polymarketOpenOrdersResults.length > 0) {
+                result.data = {
+                    orders: polymarketOpenOrdersResults.flatMap(entry => entry.orders),
+                    nextCursor: polymarketOpenOrdersResults[polymarketOpenOrdersResults.length - 1].nextCursor,
+                    // orders: polymarketOpenOrdersResults.map(entry => ({
+                    //     index: entry.index + 1,
+                    //     orders: entry.orders,
+                    //     nextCursor: entry.nextCursor,
+                    // })),
+                };
+            }
+            return result;
+        };
+
         if (onFailure === 'skip') {
             const failedDetails = failed.map(f => `Transaction ${f.index + 1}: ${f.error}`).join('; ');
             // For skip mode, check if all transactions failed
@@ -201,12 +241,12 @@ export class TransactionAPI extends API {
             // Return with error info if there were any failures
             if (failed.length > 0) {
                 const errorInfo = `Some transactions failed: ${failedDetails}.`;
-                return { hash: hashes, error: errorInfo };
+                return buildResult(errorInfo);
             }
-            return { hash: hashes };
+            return buildResult();
         } else {
             // For stop mode, we only reach here if all transactions succeeded
-            return { hash: hashes };
+            return buildResult();
         }
     }
 
@@ -726,6 +766,66 @@ export class TransactionAPI extends API {
             return { hash, orderId: orderID };
         } catch (error) {
             throw new Error(`polymarketSendCancelOrderTransaction: ${error}`);
+        }
+    }
+
+    /**
+     * Retrieves a user's Polymarket open orders via the Unifai transaction proxy.
+     */
+    private async polymarketGetOpenOrdersTransaction(
+        signer: EtherSigner | WagmiSigner,
+        tx: any,
+        address: string,
+    ): Promise<{ openOrders: OpenOrder[], nextCursor?: string }> {
+        try {
+            const parsedPayload: PolymarketOpenOrdersHexPayload = JSON.parse(tx.hex);
+            const requestData = parsedPayload.data;
+            const params: PolymarketOpenOrdersRequestParams = requestData.params;
+            const onlyFirstPage = requestData.onlyFirstPage;
+            const nextCursor = requestData.nextCursor;
+
+            const creds: ApiKeyCreds = await deriveApiKey(address, signer, this.rateLimiter);
+            if (!creds) {
+                throw new Error('Failed to derive API key for Polymarket');
+            }
+
+            const endpoint = "/data/orders";
+            const l2HeaderArgs = {
+                method: "GET",
+                requestPath: endpoint,
+            };
+
+            const headers = await createL2Headers(
+                address,
+                creds as ApiKeyCreds,
+                l2HeaderArgs,
+            );
+
+            const requestPayload: PolymarketOpenOrdersProxyRequest = {
+                headers,
+            };
+
+            requestPayload.params = params;
+            requestPayload.onlyFirstPage = onlyFirstPage;
+            requestPayload.nextCursor = nextCursor;
+
+            await this.rateLimiter?.waitForLimit('polymarket_getOpenOrders');
+            const res = await this.sendTransaction(
+                "polymarket",
+                "GetOpenOrders",
+                { headers, data: requestPayload },
+            );
+
+            if (res.error) {
+                throw new Error(`polymarket send transaction error: ${res.error}`);
+            }
+
+            const openOrders: OpenOrder[] = res.data;
+            const cursor: string = res.nextCursor;
+
+            return { openOrders, nextCursor: cursor };
+        } catch (error) {
+            throw new Error(`polymarketGetOpenOrdersTransaction: ${error}`);
         }
     }
 
