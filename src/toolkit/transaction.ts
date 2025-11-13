@@ -3,11 +3,11 @@ import { ActionContext } from './context';
 import { WagmiSigner, EtherSigner, SolanaSigner, SendConfig, isEtherSigner, isSolanaSigner, isWagmiSigner, Signer } from './types';
 import { ethers, toBeHex } from "ethers";
 import * as web3 from '@solana/web3.js';
-import { OrderType, ApiKeyCreds, OpenOrder } from "@polymarket/clob-client";
+import { OrderType, ApiKeyCreds } from "@polymarket/clob-client";
 import { orderToJson } from "@polymarket/clob-client/dist/utilities";
 import { deriveApiKey } from "./polymarket/apikey"
 import { createL2Headers } from "./polymarket/l2header"
-import { PolymarketOpenOrdersHexPayload, PolymarketOpenOrdersProxyRequest, PolymarketOpenOrdersRequestParams, PolymarketOpenOrdersResult } from "./polymarket/types";
+import { PolymarketOpenOrdersHexPayload, PolymarketOpenOrdersRequestParams } from "./polymarket/types";
 import { createJitoClient, shouldUseJito, JitoConfig, JITO_CONSTANTS, JitoClient } from './jito';
 import { createQuickNodeJitoClient, QuickNodeJitoConfig, QuickNodeJitoClient } from './jito-quicknode';
 import { getSolanaErrorInfo } from './solana-errors';
@@ -75,18 +75,33 @@ export class TransactionAPI extends API {
     }
 
     // Sign and Sends a transaction to blockchains.
-    public async signAndSendTransaction(txId: string, signer: Signer, config?: SendConfig):
-        Promise<{ hash?: string[], error?: any, data?: any }> {
+    public async signAndSendTransaction(
+        txId: string,
+        signer: Signer,
+        config?: SendConfig,
+    ): Promise<{
+        hash?: string[],
+        error?: any,
+        data?: { [key: string]: any },
+    }> {
         let address = await this.getAddress(signer);
 
-        let data = config?.txData || await this.buildTransaction(txId, signer);
+        let {
+            success,
+            type,
+            chain,
+            data: txData,
+            transactions,
+            onFailure,
+            useJito,
+            ...data
+        } = config?.txData || await this.buildTransaction(txId, signer);
 
-        const transactions = data.transactions
         if (!transactions || transactions.length === 0) {
             throw new Error('No transactions to send.')
         }
 
-        const jitoDecision = shouldUseJito(transactions, config?.useJito, data.useJito);
+        const jitoDecision = shouldUseJito(transactions, config?.useJito, useJito);
 
         if (jitoDecision.useJito) {
             let jitoClient: JitoClient | QuickNodeJitoClient | undefined;
@@ -94,7 +109,7 @@ export class TransactionAPI extends API {
                 jitoClient = this.createJitoClient(config);
             } catch (error: any) {
                 // explicitly set to use jito, should not fallback to non-jito
-                if (config?.useJito || data.useJito) {
+                if (config?.useJito || useJito) {
                     throw new Error(`failed to create jito client: ${error.message || error}`);
                 }
             }
@@ -105,22 +120,23 @@ export class TransactionAPI extends API {
                     txId,
                     transactions,
                     signer as SolanaSigner,
-                    config, config?.onFailure || data.onFailure,
+                    config,
+                    config?.onFailure || onFailure,
                 );
             }
         }
 
-        let res: any;
         let hashes: string[] = [];
+        let response: { hash?: string[], data?: any, error?: any } = {};
         let successful: Array<{ index: number, hash: string }> = [];
         let failed: Array<{ index: number, error: string }> = [];
-        let polymarketOpenOrdersResults: PolymarketOpenOrdersResult[] = [];
 
         // Determine onFailure behavior with priority: config.onFailure > data.onFailure > default (stop)
-        const onFailure = config?.onFailure || data.onFailure || 'stop';
+        onFailure = config?.onFailure || onFailure || 'stop';
 
         for (let i = 0; i < transactions.length; i++) {
             const tx = transactions[i];
+            let res: { hash?: string, data?: any } = {};
             try {
                 switch (tx.chain) {
                     case 'polygon': // Polygon Mainnet
@@ -157,24 +173,17 @@ export class TransactionAPI extends API {
                     case 'hyperliquid': // hyperliquid orders
                         res = await this.hyperliquidSendTransaction(signer as EtherSigner | WagmiSigner, tx);
                         break;
-
                     default: // evm
                         res = await this.evmSendTransaction(signer as EtherSigner | WagmiSigner, tx);
                 }
 
-                if (res.hash) {
+                if (res?.hash) {
                     hashes.push(res.hash);
                     successful.push({ index: i, hash: res.hash });
                 }
 
-                const maybeOrders = res.openOrders as OpenOrder[] | undefined;
-                if (Array.isArray(maybeOrders)) {
-                    const cursorFromRes = res.nextCursor;
-                    polymarketOpenOrdersResults.push({
-                        index: i,
-                        orders: maybeOrders,
-                        nextCursor: cursorFromRes,
-                    });
+                if (res?.data) {
+                    data = { ...(data || {}), ...res.data };
                 }
 
                 // Only sleep if it's not the last transaction
@@ -211,27 +220,6 @@ export class TransactionAPI extends API {
             }
         }
 
-        const buildResult = (error?: any) => {
-            const result: { hash: string[], error?: any, data?: any } = {
-                hash: hashes,
-            };
-            if (error !== undefined) {
-                result.error = error;
-            }
-            if (polymarketOpenOrdersResults.length > 0) {
-                result.data = {
-                    orders: polymarketOpenOrdersResults.flatMap(entry => entry.orders),
-                    nextCursor: polymarketOpenOrdersResults[polymarketOpenOrdersResults.length - 1].nextCursor,
-                    // orders: polymarketOpenOrdersResults.map(entry => ({
-                    //     index: entry.index + 1,
-                    //     orders: entry.orders,
-                    //     nextCursor: entry.nextCursor,
-                    // })),
-                };
-            }
-            return result;
-        };
-
         if (onFailure === 'skip') {
             const failedDetails = failed.map(f => `Transaction ${f.index + 1}: ${f.error}`).join('; ');
             // For skip mode, check if all transactions failed
@@ -240,14 +228,19 @@ export class TransactionAPI extends API {
             }
             // Return with error info if there were any failures
             if (failed.length > 0) {
-                const errorInfo = `Some transactions failed: ${failedDetails}.`;
-                return buildResult(errorInfo);
+                response.error = `Some transactions failed: ${failedDetails}`;
             }
-            return buildResult();
-        } else {
-            // For stop mode, we only reach here if all transactions succeeded
-            return buildResult();
         }
+
+        if (hashes?.length > 0) {
+            response.hash = hashes;
+        }
+
+        if (data && Object.keys(data).length > 0) {
+            response.data = data;
+        }
+
+        return response;
     }
 
     private async sendJitoTransactions(
@@ -515,7 +508,6 @@ export class TransactionAPI extends API {
                         });
                     }
                     break;
-
                 } catch (error) {
                     console.error(`Error sending transaction to ${rpcUrl}:`, error);
                     lastError = error as Error;
@@ -525,7 +517,7 @@ export class TransactionAPI extends API {
 
             if (lastError && successfulTransactions.length === 0) {
                 const errorInfo = getSolanaErrorInfo(lastError);
-                throw new Error(`${errorInfo.message}, set RPC URLs when calling signAndSendTransaction`);
+                throw new Error(`Error sending transaction: ${errorInfo.message}`);
             }
 
             if (!connection || !signature) {
@@ -776,7 +768,7 @@ export class TransactionAPI extends API {
         signer: EtherSigner | WagmiSigner,
         tx: any,
         address: string,
-    ): Promise<{ openOrders: OpenOrder[], nextCursor?: string }> {
+    ): Promise<{ data?: any }> {
         try {
             const parsedPayload: PolymarketOpenOrdersHexPayload = JSON.parse(tx.hex);
             const requestData = parsedPayload.data;
@@ -807,21 +799,17 @@ export class TransactionAPI extends API {
                 nextCursor,
             };
 
-            await this.rateLimiter?.waitForLimit('polymarket_getOpenOrders');
             const res = await this.sendTransaction(
                 "polymarket",
                 "GetOpenOrders",
                 { headers, data: requestPayload },
             );
 
-            if (res.error) {
+            if (res?.error) {
                 throw new Error(`polymarket send transaction error: ${res.error}`);
             }
 
-            const openOrders: OpenOrder[] = res.data;
-            const cursor: string = res.nextCursor;
-
-            return { openOrders, nextCursor: cursor };
+            return { data: res?.data };
         } catch (error) {
             throw new Error(`polymarketGetOpenOrdersTransaction: ${error}`);
         }
