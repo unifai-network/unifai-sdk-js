@@ -63,15 +63,13 @@ export class TransactionAPI extends API {
     }
 
     public async sendTransaction(chain: string, name: string, txData: any) {
-        txData.chain = chain
-        txData.name = name
         const data = await this.request('POST', `/tx/sendtransaction`, {
-            json: txData,
+            json: {...txData, chain, name},
         })
-        if (!data.success) {
-            throw data.error
+        if (data.error) {
+            throw new Error(`Send transaction failed: ${data.error}`);
         }
-        return data
+        return data;
     }
 
     // Sign and Sends a transaction to blockchains.
@@ -686,10 +684,6 @@ export class TransactionAPI extends API {
                 { headers, data: orderPayload }
             );
 
-            if (res.error) {
-                throw new Error(`polymarket send transaction error: ${res.error}`)
-            }
-
             const hash = res.transactionHash || res.transactionsHashes?.[0]
             return { hash: hash, orderId: res.orderId } // orderId is polymarket specific
         } catch (error) {
@@ -741,9 +735,6 @@ export class TransactionAPI extends API {
                 "CancelOrder",
                 { headers, data: cancelPayload },
             );
-            if (res.error) {
-                throw new Error(`polymarket send transaction error: ${res.error}`)
-            }
 
             // Check for orders that failed to cancel
             const notCanceled = res?.not_canceled;
@@ -804,10 +795,6 @@ export class TransactionAPI extends API {
                 "GetOpenOrders",
                 { headers, data: requestPayload },
             );
-
-            if (res?.error) {
-                throw new Error(`polymarket send transaction error: ${res.error}`);
-            }
 
             return { data: res?.data };
         } catch (error) {
