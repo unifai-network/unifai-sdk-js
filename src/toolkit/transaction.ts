@@ -622,7 +622,7 @@ export class TransactionAPI extends API {
         signer: EtherSigner | WagmiSigner,
         tx: any,
         address: string,
-    ): Promise<{ hash: string | undefined, orderId?: string }> {
+    ): Promise<{ hash?: string, data: any }> {
         try {
             let data = JSON.parse(tx.hex)
             let od = data.data
@@ -684,8 +684,12 @@ export class TransactionAPI extends API {
                 { headers, data: orderPayload }
             );
 
-            const hash = res.transactionHash || res.transactionsHashes?.[0]
-            return { hash: hash, orderId: res.orderId } // orderId is polymarket specific
+            let response: { hash?: string, data: any } = { data: res }
+            const hash = res.transactionsHashes?.join(',') || res.transactionHash;
+            if (hash) {
+                response.hash = hash
+            }
+            return response
         } catch (error) {
             throw new Error(`polymarketSendOrderTransaction: ${error}`)
         }
@@ -702,7 +706,7 @@ export class TransactionAPI extends API {
         signer: EtherSigner | WagmiSigner,
         tx: any,
         address: string,
-    ): Promise<{ hash: string | undefined, orderId?: string }> {
+    ): Promise<{ data: any }> {
         try {
             const data = JSON.parse(tx.hex);
             const orderID: string | undefined = data?.data?.orderID;
@@ -737,16 +741,17 @@ export class TransactionAPI extends API {
             );
 
             // Check for orders that failed to cancel
+            const canceled = res?.canceled;
             const notCanceled = res?.not_canceled;
-            if (notCanceled && Object.keys(notCanceled).length > 0) {
+            if ((!canceled || Object.keys(canceled).length == 0)
+                && notCanceled && Object.keys(notCanceled).length > 0) {
                 const reasons = Object.entries(notCanceled)
                     .map(([orderId, reason]) => `${orderId}: ${reason}`)
                     .join('; ');
                 throw new Error(`Polymarket cancel failed: ${reasons}`);
             }
 
-            const hash = res.transactionHash || res.transactionsHashes?.[0];
-            return { hash, orderId: orderID };
+            return { data: res };
         } catch (error) {
             throw new Error(`polymarketSendCancelOrderTransaction: ${error}`);
         }

@@ -37,7 +37,7 @@ or requires you to take some action), try find appropriate tools to do it.
 
   while (true) {
     const response = await openai.chat.completions.create({
-      model: 'claude-3-7-sonnet-20250219',
+      model: 'claude-sonnet-4-5',
       messages,
       tools: availableTools,
     });
