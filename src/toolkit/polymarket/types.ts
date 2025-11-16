@@ -14,3 +14,9 @@ export type PolymarketOpenOrdersHexPayload = {
         nextCursor?: string;
     };
 };
+
+export type PolymarketCheckOrderLiquidityRewardPayload = {
+    data: {
+        orderId: string;
+    };
+};

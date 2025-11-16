@@ -7,7 +7,7 @@ import { OrderType, ApiKeyCreds } from "@polymarket/clob-client";
 import { orderToJson } from "@polymarket/clob-client/dist/utilities";
 import { deriveApiKey } from "./polymarket/apikey"
 import { createL2Headers } from "./polymarket/l2header"
-import { PolymarketOpenOrdersHexPayload, PolymarketOpenOrdersRequestParams } from "./polymarket/types";
+import { PolymarketOpenOrdersHexPayload, PolymarketOpenOrdersRequestParams, PolymarketCheckOrderLiquidityRewardPayload } from "./polymarket/types";
 import { createJitoClient, shouldUseJito, JitoConfig, JITO_CONSTANTS, JitoClient } from './jito';
 import { createQuickNodeJitoClient, QuickNodeJitoConfig, QuickNodeJitoClient } from './jito-quicknode';
 import { getSolanaErrorInfo } from './solana-errors';
@@ -156,6 +156,13 @@ export class TransactionAPI extends API {
                                 break;
                             case 'GetOpenOrders':
                                 res = await this.polymarketGetOpenOrdersTransaction(
+                                    signer as EtherSigner | WagmiSigner,
+                                    tx,
+                                    address,
+                                );
+                                break;
+                            case 'CheckOrderLiquidityReward':
+                                res = await this.polymarketCheckOrderLiquidityRewardTransaction(
                                     signer as EtherSigner | WagmiSigner,
                                     tx,
                                     address,
@@ -804,6 +811,54 @@ export class TransactionAPI extends API {
             return { data: res?.data };
         } catch (error) {
             throw new Error(`polymarketGetOpenOrdersTransaction: ${error}`);
+        }
+    }
+
+    /**
+     * Checks whether a Polymarket order is currently earning liquidity rewards.
+     */
+    private async polymarketCheckOrderLiquidityRewardTransaction(
+        signer: EtherSigner | WagmiSigner,
+        tx: any,
+        address: string,
+    ): Promise<{ data?: any }> {
+        try {
+            const parsedPayload: PolymarketCheckOrderLiquidityRewardPayload = JSON.parse(tx.hex);
+            const orderId = parsedPayload?.data?.orderId;
+            if (!orderId) {
+                throw new Error('CheckOrderLiquidityReward payload missing orderId');
+            }
+
+            const creds: ApiKeyCreds = await deriveApiKey(address, signer, this.rateLimiter);
+            if (!creds) {
+                throw new Error('Failed to derive API key for Polymarket');
+            }
+
+            const endpoint = "/order-scoring";
+            const l2HeaderArgs = {
+                method: "GET",
+                requestPath: endpoint,
+            };
+
+            const headers = await createL2Headers(
+                address,
+                creds as ApiKeyCreds,
+                l2HeaderArgs,
+            );
+
+            const requestPayload = {
+                orderId,
+            };
+
+            const res = await this.sendTransaction(
+                "polymarket",
+                "CheckOrderLiquidityReward",
+                { headers, data: requestPayload },
+            );
+
+            return { data: res?.data };
+        } catch (error) {
+            throw new Error(`polymarketCheckOrderLiquidityRewardTransaction: ${error}`);
         }
     }
 
