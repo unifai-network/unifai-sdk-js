@@ -55,7 +55,7 @@ export class API {
     this.apiKey = config.apiKey || '';
     this.apiKeyHeader = config.apiKeyHeader || 'Authorization';
     this.apiUri = config.endpoint || '';
-    this.timeout = config.timeout || 10000;
+    this.timeout = config.timeout || 60000;
     this.maxRetries = config.maxRetries || 0;
     this.baseRetryDelay = config.baseRetryDelay || 1000;
     this.proxyConfig = config.proxy;

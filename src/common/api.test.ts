@@ -38,7 +38,7 @@ describe("API Class", () => {
       expect(api["apiKey"]).toBe("test-key");
       expect(api["apiKeyHeader"]).toBe("Authorization"); // Default header
       expect(api["apiUri"]).toBe("https://api.fake.com");
-      expect(api["timeout"]).toBe(10000); // Default timeout
+      expect(api["timeout"]).toBe(60000); // Default timeout
     });
 
     it("should create instance with custom API key header", () => {
@@ -67,7 +67,7 @@ describe("API Class", () => {
 
       expect(api["apiKey"]).toBe("");
       expect(api["apiUri"]).toBe("");
-      expect(api["timeout"]).toBe(10000);
+      expect(api["timeout"]).toBe(60000);
     });
 
     it("should create axios instances with proxy config (SOCKS5)", () => {
@@ -154,7 +154,7 @@ describe("API Class", () => {
         },
         params: { key: "value" },
         data: undefined,
-        timeout: 10000,
+        timeout: 60000,
       });
 
       expect(result).toEqual({ result: "test" });
@@ -176,7 +176,7 @@ describe("API Class", () => {
         },
         params: undefined,
         data: jsonData,
-        timeout: 10000,
+        timeout: 60000,
       });
     });
 
