@@ -10,6 +10,7 @@ export interface SendConfig {
     jitoEndpoint?: string // jito block engine endpoint (for original jito provider) or quicknode endpoint (for quicknode provider)
     jitoApiKey?: string // jito api key (for original jito provider)
     jitoTipAmount?: number // jito tip amount in lamports
+    broadcastMode?: 'sequential' | 'concurrent' // sequential: try rpcs one by one (default), concurrent: send to all rpcs at once, success if any succeeds
 }
 
 export type Signer = EtherSigner | WagmiSigner | SolanaSigner;

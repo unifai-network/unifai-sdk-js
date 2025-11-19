@@ -13,8 +13,8 @@ import { createQuickNodeJitoClient, QuickNodeJitoConfig, QuickNodeJitoClient } f
 import { getSolanaErrorInfo } from './solana-errors';
 import { signL1Action } from "@nktkas/hyperliquid/signing";
 
-const DEFAULT_POLL_INTERVAL = 6000;
-const DEFAULT_MAX_POLL_TIMES = 20;
+const DEFAULT_POLL_INTERVAL = 5000;
+const DEFAULT_MAX_POLL_TIMES = 18;
 
 export class TransactionAPI extends API {
     constructor(config: APIConfig) {
@@ -494,22 +494,59 @@ export class TransactionAPI extends API {
             const successfulTransactions: { type: string; hash: string }[] = [];
 
             let rpcUrls = config?.rpcUrls && config.rpcUrls.length > 0 ? config.rpcUrls : [web3.clusterApiUrl('mainnet-beta')];
-            for (const rpcUrl of rpcUrls) {
-                try {
-                    connection = new web3.Connection(rpcUrl, 'confirmed');
-                    await this.rateLimiter?.waitForLimit('solana_sendRawTransaction');
-                    signature = await connection.sendRawTransaction(serializedTransaction);
-                    if (signature) {
-                        successfulTransactions.push({
-                            type: tx.type,
-                            hash: signature,
-                        });
+            const broadcastMode = config?.broadcastMode || 'sequential';
+
+            if (broadcastMode === 'concurrent') {
+                // Send to all RPCs concurrently
+                const sendPromises = rpcUrls.map(async (rpcUrl) => {
+                    try {
+                        const conn = new web3.Connection(rpcUrl, 'confirmed');
+                        await this.rateLimiter?.waitForLimit('solana_sendRawTransaction');
+                        const sig = await conn.sendRawTransaction(serializedTransaction);
+                        return { success: true, connection: conn, signature: sig, rpcUrl };
+                    } catch (error) {
+                        console.error(`Error sending transaction to ${rpcUrl}:`, error);
+                        return { success: false, error: error as Error, rpcUrl };
                     }
-                    break;
-                } catch (error) {
-                    console.error(`Error sending transaction to ${rpcUrl}:`, error);
-                    lastError = error as Error;
-                    continue;
+                });
+
+                const results = await Promise.all(sendPromises);
+
+                // Find first successful result
+                const successResult = results.find(r => r.success);
+                if (successResult && 'signature' in successResult && successResult.connection && successResult.signature) {
+                    connection = successResult.connection;
+                    signature = successResult.signature;
+                    successfulTransactions.push({
+                        type: tx.type,
+                        hash: successResult.signature,
+                    });
+                } else {
+                    // All failed, use last error
+                    const failedResult = results.find(r => !r.success && 'error' in r);
+                    if (failedResult && 'error' in failedResult && failedResult.error) {
+                        lastError = failedResult.error;
+                    }
+                }
+            } else {
+                // Sequential mode (default)
+                for (const rpcUrl of rpcUrls) {
+                    try {
+                        connection = new web3.Connection(rpcUrl, 'confirmed');
+                        await this.rateLimiter?.waitForLimit('solana_sendRawTransaction');
+                        signature = await connection.sendRawTransaction(serializedTransaction);
+                        if (signature) {
+                            successfulTransactions.push({
+                                type: tx.type,
+                                hash: signature,
+                            });
+                        }
+                        break;
+                    } catch (error) {
+                        console.error(`Error sending transaction to ${rpcUrl}:`, error);
+                        lastError = error as Error;
+                        continue;
+                    }
                 }
             }
 
