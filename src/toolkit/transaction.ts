@@ -824,9 +824,9 @@ export class TransactionAPI extends API {
     ): Promise<{ data?: any }> {
         try {
             const parsedPayload: PolymarketCheckOrderLiquidityRewardPayload = JSON.parse(tx.hex);
-            const orderId = parsedPayload?.data?.orderId;
-            if (!orderId) {
-                throw new Error('CheckOrderLiquidityReward payload missing orderId');
+            const orderIds = parsedPayload?.data?.orderIds;
+            if (!orderIds || orderIds.length === 0) {
+                throw new Error('CheckOrderLiquidityReward payload missing orderIds');
             }
 
             const creds: ApiKeyCreds = await deriveApiKey(address, signer, this.rateLimiter);
@@ -834,10 +834,13 @@ export class TransactionAPI extends API {
                 throw new Error('Failed to derive API key for Polymarket');
             }
 
-            const endpoint = "/order-scoring";
+            const endpoint = "/orders-scoring";
+            const requestPayload = orderIds;
+            const body = JSON.stringify(requestPayload);
             const l2HeaderArgs = {
-                method: "GET",
+                method: "POST",
                 requestPath: endpoint,
+                body,
             };
 
             const headers = await createL2Headers(
@@ -846,14 +849,10 @@ export class TransactionAPI extends API {
                 l2HeaderArgs,
             );
 
-            const requestPayload = {
-                orderId,
-            };
-
             const res = await this.sendTransaction(
                 "polymarket",
                 "CheckOrderLiquidityReward",
-                { headers, data: requestPayload },
+                { headers, data: { orderIds}},
             );
 
             return { data: res?.data };

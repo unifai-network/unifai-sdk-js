@@ -17,6 +17,6 @@ export type PolymarketOpenOrdersHexPayload = {
 
 export type PolymarketCheckOrderLiquidityRewardPayload = {
     data: {
-        orderId: string;
+        orderIds: string[];
     };
 };
