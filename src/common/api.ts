@@ -1,4 +1,5 @@
 import { RateLimiter, RateLimitGroups } from './rate-limiter';
+import { DEFAULT_CONFIG, PROXY_PROTOCOLS, ERROR_CODES, ERROR_NAMES, ERROR_MESSAGES, HTTP_STATUS } from './const';
 import { Agent as HttpAgent } from 'http';
 import { Agent as HttpsAgent } from 'https';
 import { SocksProxyAgent } from 'socks-proxy-agent';
@@ -25,6 +26,8 @@ export interface APIConfig {
   baseRetryDelay?: number;
   rateLimitGroups?: RateLimitGroups;
   proxy?: ProxyConfig;
+  pollInterval?: number;
+  maxPollTimes?: number;
 }
 
 export class APIError extends Error {
@@ -53,11 +56,11 @@ export class API {
 
   constructor(config: APIConfig) {
     this.apiKey = config.apiKey || '';
-    this.apiKeyHeader = config.apiKeyHeader || 'Authorization';
+    this.apiKeyHeader = config.apiKeyHeader ?? DEFAULT_CONFIG.API_KEY_HEADER;
     this.apiUri = config.endpoint || '';
-    this.timeout = config.timeout || 60000;
-    this.maxRetries = config.maxRetries || 0;
-    this.baseRetryDelay = config.baseRetryDelay || 1000;
+    this.timeout = config.timeout ?? DEFAULT_CONFIG.DEFAULT_TIMEOUT;
+    this.maxRetries = config.maxRetries ?? DEFAULT_CONFIG.MAX_RETRIES;
+    this.baseRetryDelay = config.baseRetryDelay ?? DEFAULT_CONFIG.BASE_RETRY_DELAY;
     this.proxyConfig = config.proxy;
 
     // Initialize rate limiter if config is provided
@@ -82,7 +85,7 @@ export class API {
       const protocol = this.proxyConfig.protocol?.toLowerCase();
       const rejectUnauthorized = this.proxyConfig.rejectUnauthorized ?? true;
 
-      if (protocol === 'socks5' || protocol === 'socks5h') {
+      if (protocol === PROXY_PROTOCOLS.SOCKS5 || protocol === PROXY_PROTOCOLS.SOCKS5H) {
         // SOCKS5 proxy: use SocksProxyAgent for both HTTP and HTTPS
         const socksUrl = `${protocol}://${this.proxyConfig.auth ? `${this.proxyConfig.auth.username}:${this.proxyConfig.auth.password}@` : ''}${this.proxyConfig.host}:${this.proxyConfig.port}`;
         const socksAgent = new SocksProxyAgent(socksUrl);
@@ -124,58 +127,58 @@ export class API {
     const message = error.message;
 
     // Proxy-specific errors
-    if (code === 'EPROTO' || code === 'ERR_SSL_PROTOCOL_ERROR' || code === 'ERR_TLS_CERT_ALTNAME_INVALID') {
+    if (code === ERROR_CODES.EPROTO || code === ERROR_CODES.ERR_SSL_PROTOCOL_ERROR || code === ERROR_CODES.ERR_TLS_CERT_ALTNAME_INVALID) {
       return true; // SSL/TLS protocol errors
     }
 
     // Proxy authentication errors
-    if (status === 407) {
+    if (status === HTTP_STATUS.PROXY_AUTH_REQUIRED) {
       return true; // Proxy authentication required
     }
 
     // Forbidden (proxy IP may be blocked)
-    if (status === 403) {
+    if (status === HTTP_STATUS.FORBIDDEN) {
       return true;
     }
 
     // SOCKS5 proxy authentication failure
-    if (message && message.includes('Socks5 Authentication failed')) {
+    if (message && message.includes(ERROR_MESSAGES.SOCKS5_AUTH_FAILED)) {
       return true;
     }
 
     // Proxy gateway errors (proxy can't reach upstream or is overloaded)
-    if (status === 502 || status === 503 || status === 504) {
+    if (status === HTTP_STATUS.BAD_GATEWAY || status === HTTP_STATUS.SERVICE_UNAVAILABLE || status === HTTP_STATUS.GATEWAY_TIMEOUT) {
       return true; // Bad Gateway, Service Unavailable, Gateway Timeout
     }
 
     // Connection errors that might be proxy-related
     if (
-      code === 'ECONNREFUSED' || // Connection refused
-      code === 'ENOTFOUND' ||    // DNS lookup failed
-      code === 'ECONNRESET' ||   // Connection reset by peer
-      code === 'EHOSTUNREACH' || // Host unreachable
-      code === 'ENETUNREACH' ||  // Network unreachable
-      code === 'EPIPE'           // Broken pipe
+      code === ERROR_CODES.ECONNREFUSED || // Connection refused
+      code === ERROR_CODES.ENOTFOUND ||    // DNS lookup failed
+      code === ERROR_CODES.ECONNRESET ||   // Connection reset by peer
+      code === ERROR_CODES.EHOSTUNREACH || // Host unreachable
+      code === ERROR_CODES.ENETUNREACH ||  // Network unreachable
+      code === ERROR_CODES.EPIPE           // Broken pipe
     ) {
       return true;
     }
 
     // Timeout errors
     if (
-      code === 'ETIMEDOUT' ||       // Network timeout
-      code === 'ESOCKETTIMEDOUT' || // Socket timeout
-      code === 'ERR_SOCKET_TIMEOUT' // Socket timeout
+      code === ERROR_CODES.ETIMEDOUT ||       // Network timeout
+      code === ERROR_CODES.ESOCKETTIMEDOUT || // Socket timeout
+      code === ERROR_CODES.ERR_SOCKET_TIMEOUT // Socket timeout
     ) {
       return true;
     }
 
     // Abort/cancel errors
-    if (code === 'ECONNABORTED' || code === 'ERR_CANCELED' || error.name === 'AbortError') {
+    if (code === ERROR_CODES.ECONNABORTED || code === ERROR_CODES.ERR_CANCELED || error.name === ERROR_NAMES.ABORT_ERROR) {
       return true;
     }
 
     // DNS errors
-    if (code === 'EAI_AGAIN') {
+    if (code === ERROR_CODES.EAI_AGAIN) {
       return true; // DNS lookup timeout/temporary failure
     }
 
@@ -189,7 +192,7 @@ export class API {
       baseRetryDelay?: number;
     } = {},
   ): Promise<T> {
-    const { maxRetries = 0, baseRetryDelay = 1000 } = options;
+    const { maxRetries = DEFAULT_CONFIG.MAX_RETRIES, baseRetryDelay = DEFAULT_CONFIG.BASE_RETRY_DELAY } = options;
 
     if (maxRetries <= 0) {
       return await operation();

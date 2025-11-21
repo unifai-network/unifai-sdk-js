@@ -1,7 +1,7 @@
 import WebSocket from 'ws';
 import JSONbig from 'json-bigint';
 import { EventEmitter } from 'events';
-import { BACKEND_WS_ENDPOINT } from '../common';
+import { BACKEND_WS_ENDPOINT, DEFAULT_CONFIG } from '../common';
 import { ActionContext, ActionResult } from './context';
 import { ToolkitAPI } from './api';
 import { ToolsAPI } from '../tools/api';
@@ -29,7 +29,7 @@ export class Toolkit extends EventEmitter {
   public api: ToolkitAPI;
   private toolsAPI: ToolsAPI | null;
 
-  constructor({ apiKey, reconnectInterval = 5000 }: ToolkitConfig) {
+  constructor({ apiKey, reconnectInterval = DEFAULT_CONFIG.RECONNECT_INTERVAL }: ToolkitConfig) {
     super();
     this.apiKey = apiKey;
     this.reconnectInterval = reconnectInterval;
