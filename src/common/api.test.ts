@@ -1,4 +1,5 @@
 import { API, APIError } from "./api";
+import { PROXY_PROTOCOLS, ERROR_CODES, HTTP_STATUS } from "./const";
 import axios from "axios";
 
 // Mock axios
@@ -74,7 +75,7 @@ describe("API Class", () => {
       const api = new API({
         endpoint: "https://api.fake.com",
         proxy: {
-          protocol: "socks5",
+          protocol: PROXY_PROTOCOLS.SOCKS5,
           host: "proxy.example.com",
           port: 1080,
           auth: {
@@ -92,7 +93,7 @@ describe("API Class", () => {
       const api = new API({
         endpoint: "https://api.fake.com",
         proxy: {
-          protocol: "http",
+          protocol: PROXY_PROTOCOLS.HTTP,
           host: "proxy.example.com",
           port: 8080,
         },
@@ -239,13 +240,13 @@ describe("API Class", () => {
 
     it("should handle request failure without response", async () => {
       const errorResponse = {
-        code: "ECONNREFUSED",
+        code: ERROR_CODES.ECONNREFUSED,
         message: "Connection refused",
       };
       mockAxiosInstance.request.mockRejectedValueOnce(errorResponse);
 
       await expect(api.request("GET", "/test")).rejects.toMatchObject({
-        code: "ECONNREFUSED",
+        code: ERROR_CODES.ECONNREFUSED,
       });
     });
   });
@@ -267,7 +268,7 @@ describe("API Class", () => {
 
     it("should fallback to direct connection on proxy error (no response)", async () => {
       const proxyError = {
-        code: "ECONNREFUSED",
+        code: ERROR_CODES.ECONNREFUSED,
         message: "Connection refused",
       };
       const directResponse = { data: { result: "success" } };
@@ -285,7 +286,7 @@ describe("API Class", () => {
     it("should fallback to direct connection on proxy authentication error", async () => {
       const proxyError = {
         response: {
-          status: 407,
+          status: HTTP_STATUS.PROXY_AUTH_REQUIRED,
           data: { message: "Proxy Authentication Required" },
         },
       };
@@ -304,7 +305,7 @@ describe("API Class", () => {
     it("should fallback on gateway errors (502, 503, 504)", async () => {
       const proxyError = {
         response: {
-          status: 502,
+          status: HTTP_STATUS.BAD_GATEWAY,
           data: { message: "Bad Gateway" },
         },
       };
@@ -336,7 +337,7 @@ describe("API Class", () => {
 
     it("should throw direct connection error if both fail", async () => {
       const proxyError = {
-        code: "ECONNREFUSED",
+        code: ERROR_CODES.ECONNREFUSED,
         message: "Proxy connection refused",
       };
       const directError = {
@@ -378,14 +379,14 @@ describe("API Class", () => {
       });
 
       const proxyError = {
-        code: "ECONNREFUSED",
+        code: ERROR_CODES.ECONNREFUSED,
         message: "Connection refused",
       };
 
       mockProxyInstance.request.mockRejectedValueOnce(proxyError);
 
       await expect(apiWithoutFallback.request("GET", "/test")).rejects.toMatchObject({
-        code: "ECONNREFUSED",
+        code: ERROR_CODES.ECONNREFUSED,
       });
 
       expect(mockProxyInstance.request).toHaveBeenCalledTimes(1);
@@ -481,8 +482,8 @@ describe("API Class", () => {
 
       // Fail twice, then succeed
       mockAxiosInstance.request
-        .mockRejectedValueOnce({ code: "ECONNRESET", message: "Connection reset" })
-        .mockRejectedValueOnce({ code: "ETIMEDOUT", message: "Timeout" })
+        .mockRejectedValueOnce({ code: ERROR_CODES.ECONNRESET, message: "Connection reset" })
+        .mockRejectedValueOnce({ code: ERROR_CODES.ETIMEDOUT, message: "Timeout" })
         .mockResolvedValueOnce(successResponse);
 
       const result = await api.request("GET", "/test", {
@@ -516,11 +517,11 @@ describe("API Class", () => {
     });
 
     it("should not retry when maxRetries is 0 or not set", async () => {
-      const error = { code: "ECONNREFUSED", message: "Connection refused" };
+      const error = { code: ERROR_CODES.ECONNREFUSED, message: "Connection refused" };
       mockAxiosInstance.request.mockRejectedValueOnce(error);
 
       await expect(api.request("GET", "/test")).rejects.toMatchObject({
-        code: "ECONNREFUSED",
+        code: ERROR_CODES.ECONNREFUSED,
       });
 
       expect(mockAxiosInstance.request).toHaveBeenCalledTimes(1);
@@ -583,7 +584,7 @@ describe("API Class", () => {
 
     it("should return true for errors without response", () => {
       const error = {
-        code: "ECONNREFUSED",
+        code: ERROR_CODES.ECONNREFUSED,
         message: "Connection refused",
       };
 
@@ -593,7 +594,7 @@ describe("API Class", () => {
     it("should return true for proxy authentication errors", () => {
       const error = {
         response: {
-          status: 407,
+          status: HTTP_STATUS.PROXY_AUTH_REQUIRED,
         },
       };
 
@@ -601,15 +602,15 @@ describe("API Class", () => {
     });
 
     it("should return true for gateway errors", () => {
-      expect(api["isProxyOrNetworkError"]({ response: { status: 502 } })).toBe(true);
-      expect(api["isProxyOrNetworkError"]({ response: { status: 503 } })).toBe(true);
-      expect(api["isProxyOrNetworkError"]({ response: { status: 504 } })).toBe(true);
+      expect(api["isProxyOrNetworkError"]({ response: { status: HTTP_STATUS.BAD_GATEWAY } })).toBe(true);
+      expect(api["isProxyOrNetworkError"]({ response: { status: HTTP_STATUS.SERVICE_UNAVAILABLE } })).toBe(true);
+      expect(api["isProxyOrNetworkError"]({ response: { status: HTTP_STATUS.GATEWAY_TIMEOUT } })).toBe(true);
     });
 
     it("should return true for 403 errors", () => {
       const error = {
         response: {
-          status: 403,
+          status: HTTP_STATUS.FORBIDDEN,
         },
       };
 

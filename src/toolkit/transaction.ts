@@ -1,4 +1,4 @@
-import { API, APIConfig, TRANSACTION_API_ENDPOINT } from '../common';
+import { API, APIConfig, TRANSACTION_API_ENDPOINT, DEFAULT_CONFIG } from '../common';
 import { ActionContext } from './context';
 import { WagmiSigner, EtherSigner, SolanaSigner, SendConfig, isEtherSigner, isSolanaSigner, isWagmiSigner, Signer } from './types';
 import { ethers, toBeHex } from "ethers";
@@ -13,15 +13,17 @@ import { createQuickNodeJitoClient, QuickNodeJitoConfig, QuickNodeJitoClient } f
 import { getSolanaErrorInfo } from './solana-errors';
 import { signL1Action } from "@nktkas/hyperliquid/signing";
 
-const DEFAULT_POLL_INTERVAL = 5000;
-const DEFAULT_MAX_POLL_TIMES = 18;
-
 export class TransactionAPI extends API {
+    private pollInterval: number;
+    private maxPollTimes: number;
+
     constructor(config: APIConfig) {
         if (!config.endpoint) {
             config.endpoint = TRANSACTION_API_ENDPOINT;
         }
         super(config);
+        this.pollInterval = config.pollInterval ?? DEFAULT_CONFIG.POLL_INTERVAL;
+        this.maxPollTimes = config.maxPollTimes ?? DEFAULT_CONFIG.MAX_POLL_TIMES;
     }
 
     public async createTransaction(type: string, ctx: ActionContext, payload: any = {}) {
@@ -568,7 +570,7 @@ export class TransactionAPI extends API {
 
             const finalConnection = connection;
             const abortController = new AbortController();
-            let pollResult = this.solPollTransactionStatus(finalConnection, signature, DEFAULT_MAX_POLL_TIMES, DEFAULT_POLL_INTERVAL, abortController.signal);
+            let pollResult = this.solPollTransactionStatus(finalConnection, signature, this.maxPollTimes, this.pollInterval, abortController.signal);
             let wsResult = this.solWaitTransactionConfirmed(finalConnection, signature, signedTransaction);
 
             try {
@@ -593,8 +595,8 @@ export class TransactionAPI extends API {
     private async solPollTransactionStatus(
         connection: web3.Connection,
         signature: string,
-        maxPollTimes: number = DEFAULT_MAX_POLL_TIMES,
-        pollInterval: number = DEFAULT_POLL_INTERVAL,
+        maxPollTimes: number,
+        pollInterval: number,
         signal?: AbortSignal
     ): Promise<any> {
         for (let pollTimes = 0; pollTimes < maxPollTimes; pollTimes++) {
