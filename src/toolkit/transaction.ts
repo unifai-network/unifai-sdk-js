@@ -1,6 +1,6 @@
 import { API, APIConfig, TRANSACTION_API_ENDPOINT } from '../common';
 import { ActionContext } from './context';
-import { WagmiSigner, EtherSigner, SolanaSigner, SendConfig, isEtherSigner, isSolanaSigner, isWagmiSigner, Signer } from './types';
+import { WagmiSigner, EtherSigner, SolanaSigner, SendConfig, isEtherSigner, isSolanaSigner, isWagmiSigner, Signer, EtherApiKeySigner } from './types';
 import { ethers, toBeHex } from "ethers";
 import * as web3 from '@solana/web3.js';
 import { OrderType, ApiKeyCreds } from "@polymarket/clob-client";
@@ -70,6 +70,20 @@ export class TransactionAPI extends API {
             throw new Error(`Send transaction failed: ${data.error}`);
         }
         return data;
+    }
+
+    public NewOpinionLabsSigner(EtherSigner: EtherSigner, apiKey: string): EtherApiKeySigner {
+        return {
+            ...EtherSigner,
+            apiKey,
+        }
+    }
+
+    public NewEtherApiKeySigner(EtherSigner: EtherSigner, apiKey: string): EtherApiKeySigner {
+        return {
+            ...EtherSigner,
+            apiKey,
+        }
     }
 
     // Sign and Sends a transaction to blockchains.
