@@ -13,7 +13,7 @@ export interface SendConfig {
     broadcastMode?: 'sequential' | 'concurrent' // sequential: try rpcs one by one (default), concurrent: send to all rpcs at once, success if any succeeds
 }
 
-export type Signer = EtherSigner | WagmiSigner | SolanaSigner;
+export type Signer = EtherSigner | WagmiSigner | SolanaSigner | EtherApiKeySigner;
 
 export interface EtherSigner {
     address: string;
@@ -22,6 +22,9 @@ export interface EtherSigner {
     signTypedData: (domain: any, types: any, value: any) => Promise<string>
 }
 
+export interface EtherApiKeySigner extends EtherSigner {
+    apiKey: string;
+}
 export interface WagmiSigner {
     account: any
     getAddresses: () => Promise<string[]>;
