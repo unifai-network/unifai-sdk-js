@@ -1,31 +1,13 @@
-import {
-  API,
-  APIConfig,
-  TRANSACTION_API_ENDPOINT,
-  DEFAULT_CONFIG,
-} from "../../common";
+import { API, APIConfig, TRANSACTION_API_ENDPOINT } from "../../common";
 import { ActionContext } from "../context";
-import {
-  Signer,
-  EtherSigner,
-  SolanaSigner,
-  WagmiSigner,
-  isEtherSigner,
-  isSolanaSigner,
-  isWagmiSigner,
-} from "../types";
+import { Signer, getSignerAddress } from "../types";
 
 export class BaseTransactionAPI extends API {
-  protected pollInterval: number;
-  protected maxPollTimes: number;
-
   constructor(config: APIConfig) {
     if (!config.endpoint) {
       config.endpoint = TRANSACTION_API_ENDPOINT;
     }
     super(config);
-    this.pollInterval = config.pollInterval ?? DEFAULT_CONFIG.POLL_INTERVAL;
-    this.maxPollTimes = config.maxPollTimes ?? DEFAULT_CONFIG.MAX_POLL_TIMES;
   }
 
   public async createTransaction(
@@ -53,7 +35,7 @@ export class BaseTransactionAPI extends API {
     let address =
       typeof signerOrAddress === "string"
         ? signerOrAddress
-        : await this.getAddress(signerOrAddress);
+        : await getSignerAddress(signerOrAddress);
     let buildBody = { txId, address };
     let data = await this.request("POST", `/tx/build`, {
       json: buildBody,
@@ -96,25 +78,5 @@ export class BaseTransactionAPI extends API {
       throw new Error(`Send transaction failed: ${data.error}`);
     }
     return data;
-  }
-
-  protected async getAddress(signer: Signer): Promise<string> {
-    let address: string = "";
-
-    if (isEtherSigner(signer)) {
-      address = (signer as EtherSigner).address; // ethers signer
-    } else if (isSolanaSigner(signer)) {
-      address = (signer as SolanaSigner).publicKey.toBase58(); // solana provider
-    } else if (isWagmiSigner(signer)) {
-      // wagmi wallet
-      const addresses = await (signer as WagmiSigner).getAddresses(); // ethers signer with getAddresses method
-      if (addresses.length > 0) {
-        address = addresses[0]; // Use the first address
-      }
-    } else {
-      throw new Error("Signer does not have an address or publicKey.");
-    }
-
-    return address;
   }
 }

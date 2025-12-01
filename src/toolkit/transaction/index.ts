@@ -1,5 +1,5 @@
-import { APIConfig } from '../../common';
-import { WagmiSigner, EtherSigner, SolanaSigner, SendConfig, isEtherSigner, isWagmiSigner, Signer } from '../types';
+import { APIConfig, DEFAULT_CONFIG } from '../../common';
+import { WagmiSigner, EtherSigner, SolanaSigner, SendConfig, isEtherSigner, isWagmiSigner, Signer, getSignerAddress } from '../types';
 import { ethers, toBeHex } from "ethers";
 import * as web3 from '@solana/web3.js';
 import { OrderType, ApiKeyCreds } from "@polymarket/clob-client";
@@ -14,9 +14,13 @@ import { signL1Action } from "@nktkas/hyperliquid/signing";
 import { BaseTransactionAPI } from './base';
 
 export class TransactionAPI extends BaseTransactionAPI {
+    private pollInterval: number;
+    private maxPollTimes: number;
 
     constructor(config: APIConfig) {
         super(config);
+        this.pollInterval = config.pollInterval ?? DEFAULT_CONFIG.POLL_INTERVAL;
+        this.maxPollTimes = config.maxPollTimes ?? DEFAULT_CONFIG.MAX_POLL_TIMES;
     }
 
     // Sign and Sends a transaction to blockchains.
@@ -29,7 +33,7 @@ export class TransactionAPI extends BaseTransactionAPI {
         error?: any,
         data?: { [key: string]: any },
     }> {
-        let address = await this.getAddress(signer);
+        let address = await getSignerAddress(signer);
 
         let {
             success,
@@ -216,7 +220,7 @@ export class TransactionAPI extends BaseTransactionAPI {
 
                 // Complete the transaction
                 if (result.hash.length > 0) {
-                    const address = await this.getAddress(signer);
+                    const address = await getSignerAddress(signer);
                     try {
                         await this.completeTransaction(txId, result.hash, address);
                     } catch (error: any) {
@@ -284,7 +288,7 @@ export class TransactionAPI extends BaseTransactionAPI {
 
         // Handle completion and results based on onFailure mode
         if (allHashes.length > 0) {
-            const address = await this.getAddress(signer);
+            const address = await getSignerAddress(signer);
             try {
                 await this.completeTransaction(txId, allHashes, address);
             } catch (error: any) {
