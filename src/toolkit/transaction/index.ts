@@ -89,7 +89,9 @@ export class TransactionAPI extends BaseTransactionAPI {
                     }
                 }
 
-                return { hash: jitoResult.hash, error: jitoResult.error };
+                return jitoResult.error
+                    ? { hash: jitoResult.hash, error: jitoResult.error }
+                    : { hash: jitoResult.hash };
             }
         }
 
