@@ -95,7 +95,10 @@ export class PolymarketHandler {
       );
 
       let response: { hash?: string; data: any } = { data: res };
-      const hash = res.transactionsHashes?.join(",") || res.transactionHash;
+      const hash =
+        res?.transactionsHashes?.join(",") ||
+        res?.transactionHash ||
+        undefined;
       if (hash) {
         response.hash = hash;
       }
