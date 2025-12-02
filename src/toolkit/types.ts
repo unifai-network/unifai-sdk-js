@@ -53,3 +53,23 @@ export function isSolanaSigner(signer: any): boolean {
     return typeof signer === 'object' && 'publicKey' in signer &&
         'signTransaction' in signer
 }
+
+export async function getSignerAddress(signer: Signer): Promise<string> {
+  let address: string = "";
+
+  if (isEtherSigner(signer)) {
+    address = (signer as EtherSigner).address; // ethers signer
+  } else if (isSolanaSigner(signer)) {
+    address = (signer as SolanaSigner).publicKey.toBase58(); // solana provider
+  } else if (isWagmiSigner(signer)) {
+    // wagmi wallet
+    const addresses = await (signer as WagmiSigner).getAddresses(); // ethers signer with getAddresses method
+    if (addresses.length > 0) {
+      address = addresses[0]; // Use the first address
+    }
+  } else {
+    throw new Error("Signer does not have an address or publicKey.");
+  }
+
+  return address;
+}

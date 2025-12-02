@@ -1,77 +1,26 @@
-import { API, APIConfig, TRANSACTION_API_ENDPOINT, DEFAULT_CONFIG } from '../common';
-import { ActionContext } from './context';
-import { WagmiSigner, EtherSigner, SolanaSigner, SendConfig, isEtherSigner, isSolanaSigner, isWagmiSigner, Signer } from './types';
+import { APIConfig, DEFAULT_CONFIG } from '../../common';
+import { WagmiSigner, EtherSigner, SolanaSigner, SendConfig, isEtherSigner, isWagmiSigner, Signer, getSignerAddress } from '../types';
 import { ethers, toBeHex } from "ethers";
 import * as web3 from '@solana/web3.js';
 import { OrderType, ApiKeyCreds } from "@polymarket/clob-client";
 import { orderToJson } from "@polymarket/clob-client/dist/utilities";
-import { deriveApiKey } from "./polymarket/apikey"
-import { createL2Headers } from "./polymarket/l2header"
-import { PolymarketOpenOrdersHexPayload, PolymarketOpenOrdersRequestParams, PolymarketCheckOrderLiquidityRewardPayload } from "./polymarket/types";
-import { createJitoClient, shouldUseJito, JitoConfig, JITO_CONSTANTS, JitoClient } from './jito';
-import { createQuickNodeJitoClient, QuickNodeJitoConfig, QuickNodeJitoClient } from './jito-quicknode';
-import { getSolanaErrorInfo } from './solana-errors';
+import { deriveApiKey } from "../polymarket/apikey"
+import { createL2Headers } from "../polymarket/l2header"
+import { PolymarketOpenOrdersHexPayload, PolymarketOpenOrdersRequestParams, PolymarketCheckOrderLiquidityRewardPayload } from "../polymarket/types";
+import { createJitoClient, shouldUseJito, JitoConfig, JITO_CONSTANTS, JitoClient } from '../jito';
+import { createQuickNodeJitoClient, QuickNodeJitoConfig, QuickNodeJitoClient } from '../jito-quicknode';
+import { getSolanaErrorInfo } from '../solana-errors';
 import { signL1Action } from "@nktkas/hyperliquid/signing";
+import { BaseTransactionAPI } from './base';
 
-export class TransactionAPI extends API {
+export class TransactionAPI extends BaseTransactionAPI {
     private pollInterval: number;
     private maxPollTimes: number;
 
     constructor(config: APIConfig) {
-        if (!config.endpoint) {
-            config.endpoint = TRANSACTION_API_ENDPOINT;
-        }
         super(config);
         this.pollInterval = config.pollInterval ?? DEFAULT_CONFIG.POLL_INTERVAL;
         this.maxPollTimes = config.maxPollTimes ?? DEFAULT_CONFIG.MAX_POLL_TIMES;
-    }
-
-    public async createTransaction(type: string, ctx: ActionContext, payload: any = {}) {
-        const data = {
-            agentId: ctx.agentId,
-            actionId: ctx.actionId,
-            actionName: ctx.actionName,
-            type,
-            payload,
-        }
-        return await this.request('POST', `/tx/create`, { json: data, timeout: 60000 });
-    }
-
-    public async buildTransaction(txId: string, signerOrAddress: Signer | string) {
-        let address = typeof signerOrAddress === 'string' ? signerOrAddress : await this.getAddress(signerOrAddress);
-        let buildBody = { txId, address };
-        let data = await this.request('POST', `/tx/build`, { json: buildBody, timeout: 60000 });
-        if (!data.success) {
-            throw new Error(`Build transaction failed: ${data.error}`)
-        }
-        return data
-    }
-
-    public async completeTransaction(txId: string, txHash: string[], address: string) {
-        let completeBody = { txId, txHash: txHash.join(','), address };
-        let data = await this.request('POST', `/tx/complete`, { json: completeBody });
-        if (data.success || data.message === 'Transaction completed successfully') {
-            return data;
-        }
-        throw new Error(`Complete transaction failed: ${data.error}`)
-    }
-
-    public async getTransaction(txId: string) {
-        let data = await this.request('GET', `/tx/get/${txId}`);
-        if (data.error) {
-            throw new Error(`Get transaction failed: ${data.error}`)
-        }
-        return data
-    }
-
-    public async sendTransaction(chain: string, name: string, txData: any) {
-        const data = await this.request('POST', `/tx/sendtransaction`, {
-            json: {...txData, chain, name},
-        })
-        if (data.error) {
-            throw new Error(`Send transaction failed: ${data.error}`);
-        }
-        return data;
     }
 
     // Sign and Sends a transaction to blockchains.
@@ -84,7 +33,7 @@ export class TransactionAPI extends API {
         error?: any,
         data?: { [key: string]: any },
     }> {
-        let address = await this.getAddress(signer);
+        let address = await getSignerAddress(signer);
 
         let {
             success,
@@ -271,7 +220,7 @@ export class TransactionAPI extends API {
 
                 // Complete the transaction
                 if (result.hash.length > 0) {
-                    const address = await this.getAddress(signer);
+                    const address = await getSignerAddress(signer);
                     try {
                         await this.completeTransaction(txId, result.hash, address);
                     } catch (error: any) {
@@ -339,7 +288,7 @@ export class TransactionAPI extends API {
 
         // Handle completion and results based on onFailure mode
         if (allHashes.length > 0) {
-            const address = await this.getAddress(signer);
+            const address = await getSignerAddress(signer);
             try {
                 await this.completeTransaction(txId, allHashes, address);
             } catch (error: any) {
@@ -397,25 +346,6 @@ export class TransactionAPI extends API {
     // ------------------------------------------------
     // the following are private members.
     // ------------------------------------------------
-
-    private async getAddress(signer: Signer) {
-        let address: string = '';
-
-        if (isEtherSigner(signer)) {
-            address = (signer as EtherSigner).address; // ethers signer
-        } else if (isSolanaSigner(signer)) {
-            address = (signer as SolanaSigner).publicKey.toBase58(); // solana provider
-        } else if (isWagmiSigner(signer)) { // wagmi wallet
-            const addresses = await (signer as WagmiSigner).getAddresses(); // ethers signer with getAddresses method
-            if (addresses.length > 0) {
-                address = addresses[0]; // Use the first address
-            }
-        } else {
-            throw new Error('Signer does not have an address or publicKey.');
-        }
-
-        return address;
-    }
 
     private async evmSendTransaction(signer: EtherSigner | WagmiSigner, tx: any): Promise<{ hash: string | undefined }> {
         try {
