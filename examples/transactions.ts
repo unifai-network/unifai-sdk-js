@@ -1,14 +1,15 @@
 import { config } from 'dotenv';
 import OpenAI from 'openai';
 import { Tools, TransactionAPI } from '../dist';
-import { Wallet } from 'ethers';
+import { Wallet, JsonRpcProvider } from 'ethers';
 import { Keypair } from '@solana/web3.js';
 import bs58 from 'bs58';
 
 config({ path: 'examples/.env' });
 
-// Load private keys from env or file
+// Load private keys and configuration from env
 const EVM_PRIVATE_KEY = process.env.EVM_PRIVATE_KEY || '';
+const EVM_RPC_URL = process.env.EVM_RPC_URL || '';
 const SOLANA_PRIVATE_KEY = process.env.SOLANA_PRIVATE_KEY || '';
 
 async function run(msg: string) {
@@ -20,7 +21,15 @@ async function run(msg: string) {
   });
 
   // Initialize unified signer that automatically routes to correct chain
-  const evmWallet = EVM_PRIVATE_KEY ? new Wallet(EVM_PRIVATE_KEY) : null;
+  // Create EVM wallet with provider
+  let evmWallet: Wallet | null = null;
+  if (EVM_PRIVATE_KEY) {
+    if (!EVM_RPC_URL) {
+      throw new Error('EVM_RPC_URL is required when using EVM_PRIVATE_KEY');
+    }
+    const provider = new JsonRpcProvider(EVM_RPC_URL);
+    evmWallet = new Wallet(EVM_PRIVATE_KEY, provider);
+  }
 
   // Support multiple Solana private key formats
   const solanaKeypair = SOLANA_PRIVATE_KEY ? (() => {
@@ -152,6 +161,7 @@ if (require.main === module) {
     console.log('  UNIFAI_AGENT_API_KEY - UnifAI API key');
     console.log('  ANTHROPIC_API_KEY - Anthropic API key');
     console.log('  EVM_PRIVATE_KEY - EVM wallet private key (if you plan to send evm transactions)');
+    console.log('  EVM_RPC_URL - EVM RPC endpoint URL (required if using EVM_PRIVATE_KEY)');
     console.log('  SOLANA_PRIVATE_KEY - Solana wallet private key in hex (if you plan to send solana transactions)');
     process.exit(1);
   }
