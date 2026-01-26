@@ -12,7 +12,7 @@ npm install unifai-sdk
 
 ## Getting your UnifAI API key
 
-You can get your API key for free from [UnifAI](https://app.unifai.network/).
+You can get your API key for free from [UnifAI Console](https://console.unifai.network/).
 
 There are two types of API keys:
 
@@ -21,7 +21,7 @@ There are two types of API keys:
 
 ## Using tools
 
-To use tools in your agents, you need an **agent** API key. You can get an agent API key for free at [UnifAI](https://app.unifai.network/).
+To use tools in your agents, you need an **agent** API key. You can get an agent API key for free at [UnifAI Console](https://console.unifai.network/).
 
 ```typescript
 import { Tools } from 'unifai-sdk';
@@ -53,7 +53,7 @@ const staticTools = await tools.getTools({
 });
 ```
 
-You can find available toolkits at https://app.unifai.network/toolkits.
+You can find available toolkits at https://console.unifai.network/toolkits.
 
 #### Static Actions
 
@@ -66,7 +66,7 @@ const staticTools = await tools.getTools({
 });
 ```
 
-You can find available actions at https://app.unifai.network/actions.
+You can find available actions at https://console.unifai.network/actions.
 
 #### Mixed Tools
 
@@ -194,7 +194,7 @@ Anyone can create dynamic tools in UnifAI by creating a toolkit.
 
 A toolkit is a collection of tools that are connected to the UnifAI infrastructure, and can be searched and used by agents dynamically.
 
-Initialize a toolkit client with your **toolkit** API key. You can get a toolkit API key for free at [UnifAI](https://app.unifai.network/).
+Initialize a toolkit client with your **toolkit** API key. You can get a toolkit API key for free at [UnifAI Console](https://console.unifai.network/).
 
 ```typescript
 import { Toolkit } from 'unifai-sdk';
