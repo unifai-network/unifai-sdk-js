@@ -163,7 +163,7 @@ Make sure you have npm installed. Then in your MCP client config:
 
 Now your MCP client will be able to access all the tools in UnifAI automatically through dynamic tools.
 
-You can use environment variable to choose dynamic/static tools exposed by the MCP server, for example:
+You can use environment variables to choose dynamic/static tools exposed by the MCP server, for example:
 
 ```json
 {
@@ -187,6 +187,62 @@ You can use environment variable to choose dynamic/static tools exposed by the M
   }
 }
 ```
+
+### Using the CLI
+
+The `unifai` CLI lets you search, invoke, and sign transactions directly from the command line. It's designed for both interactive use and AI agent integration.
+
+```bash
+# Install globally
+npm install -g unifai-sdk
+
+# Or use via npx
+npx -p unifai-sdk unifai --help
+```
+
+Set your API key:
+
+```bash
+export UNIFAI_AGENT_API_KEY="your-api-key"
+```
+
+Search for tools:
+
+```bash
+unifai search --query "solana swap"
+```
+
+Invoke a tool:
+
+```bash
+unifai invoke --action "Solana--7--getBalance" --payload '{"walletAddress": "..."}'
+```
+
+Invoke with automatic transaction signing:
+
+```bash
+export SOLANA_PRIVATE_KEY="your-key"
+export SOLANA_RPC_URL="https://api.mainnet-beta.solana.com"
+
+unifai invoke --action "Solana--7--transfer" \
+  --payload '{"walletAddress": "...", "toWalletAddress": "...", "amount": "0.001"}' \
+  --sign
+```
+
+Sign a transaction by ID:
+
+```bash
+unifai tx sign <txId>
+```
+
+Manage configuration:
+
+```bash
+unifai config init          # Create config file (~/.config/unifai-cli/config.yaml)
+unifai config show          # Show current configuration
+```
+
+The CLI supports Solana, Ethereum, Base, BSC, Polygon, Polymarket, and Hyperliquid chains for transaction signing. Private keys are configured via environment variables or the config file — never passed as CLI flags.
 
 ## Creating tools
 

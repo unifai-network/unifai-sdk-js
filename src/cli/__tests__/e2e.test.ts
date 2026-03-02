@@ -30,7 +30,6 @@ const describeIfLive = process.env.UNIFAI_LIVE_TEST ? describe : describe.skip;
 
 describe('E2E - CLI binary', () => {
   beforeAll(() => {
-    // Verify CLI is built
     if (!fs.existsSync(CLI_PATH)) {
       throw new Error(`CLI not built. Run 'npm run build' first. Expected: ${CLI_PATH}`);
     }

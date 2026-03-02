@@ -1,7 +1,11 @@
 {
   "name": "unifai-sdk",
-  "version": "0.8.0",
+  "version": "1.0.0",
   "description": "unifai-sdk-js is the Javascript/Typescript SDK for UnifAI, an AI native platform for dynamic tools and agent to agent communication.",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/unifai-network/unifai-sdk-js"
+  },
   "main": "dist/index.js",
   "module": "dist/index.js",
   "types": "dist/index.d.ts",
