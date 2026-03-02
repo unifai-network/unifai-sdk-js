@@ -2,7 +2,7 @@ import { config } from 'dotenv';
 import OpenAI from 'openai';
 import { Tools, TransactionAPI } from '../dist';
 import { Wallet, JsonRpcProvider } from 'ethers';
-import { Keypair } from '@solana/web3.js';
+import { Keypair, VersionedTransaction } from '@solana/web3.js';
 import bs58 from 'bs58';
 
 config({ path: 'examples/.env' });
@@ -60,7 +60,14 @@ async function run(msg: string) {
     // Spread Solana signer methods (publicKey, signTransaction)
     ...(solanaKeypair && {
       publicKey: solanaKeypair.publicKey,
-      signTransaction: async (tx: any) => { tx.sign([solanaKeypair]); return tx; },
+      signTransaction: async (tx: any) => {
+        if (tx instanceof VersionedTransaction) {
+          tx.sign([solanaKeypair]);
+        } else {
+          tx.sign(solanaKeypair);
+        }
+        return tx;
+      },
     }),
   };
 
