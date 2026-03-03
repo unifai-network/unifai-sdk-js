@@ -40,6 +40,14 @@ export interface CLIFlags {
   timeout?: string;
 }
 
+const DEFAULT_RPC_URLS = {
+  solana: 'https://api.mainnet-beta.solana.com',
+  ethereum: 'https://eth.llamarpc.com',
+  base: 'https://mainnet.base.org',
+  bsc: 'https://bsc-dataseed.binance.org',
+  polygon: 'https://rpc-mainnet.matic.quiknode.pro',
+};
+
 const DEFAULTS = {
   endpoint: BACKEND_API_ENDPOINT,
   timeout: 60000,
@@ -106,11 +114,11 @@ export function resolveConfig(flags: CLIFlags): EffectiveConfig {
     configPath: val(configPath, configSource),
     solanaPrivateKey: resolve(undefined, process.env.SOLANA_PRIVATE_KEY, file.solana_private_key, ''),
     evmPrivateKey: resolve(undefined, process.env.EVM_PRIVATE_KEY, file.evm_private_key, ''),
-    solanaRpcUrl: resolve(undefined, process.env.SOLANA_RPC_URL, file.solana_rpc_url, ''),
-    ethereumRpcUrl: resolve(undefined, process.env.ETHEREUM_RPC_URL, file.ethereum_rpc_url, ''),
-    baseRpcUrl: resolve(undefined, process.env.BASE_RPC_URL, file.base_rpc_url, ''),
-    bscRpcUrl: resolve(undefined, process.env.BSC_RPC_URL, file.bsc_rpc_url, ''),
-    polygonRpcUrl: resolve(undefined, process.env.POLYGON_RPC_URL, file.polygon_rpc_url, ''),
+    solanaRpcUrl: resolve(undefined, process.env.SOLANA_RPC_URL, file.solana_rpc_url, DEFAULT_RPC_URLS.solana),
+    ethereumRpcUrl: resolve(undefined, process.env.ETHEREUM_RPC_URL, file.ethereum_rpc_url, DEFAULT_RPC_URLS.ethereum),
+    baseRpcUrl: resolve(undefined, process.env.BASE_RPC_URL, file.base_rpc_url, DEFAULT_RPC_URLS.base),
+    bscRpcUrl: resolve(undefined, process.env.BSC_RPC_URL, file.bsc_rpc_url, DEFAULT_RPC_URLS.bsc),
+    polygonRpcUrl: resolve(undefined, process.env.POLYGON_RPC_URL, file.polygon_rpc_url, DEFAULT_RPC_URLS.polygon),
   };
 }
 
@@ -144,10 +152,10 @@ export const CONFIG_TEMPLATE = `# UnifAI CLI Configuration
 # EVM private key (hex, with or without 0x prefix)
 # evm_private_key: ""
 
-# RPC URLs (optional, for transaction signing)
-# solana_rpc_url: ""
-# ethereum_rpc_url: ""
-# base_rpc_url: ""
-# bsc_rpc_url: ""
-# polygon_rpc_url: ""
+# RPC URLs (optional, defaults to public endpoints)
+# solana_rpc_url: "${DEFAULT_RPC_URLS.solana}"
+# ethereum_rpc_url: "${DEFAULT_RPC_URLS.ethereum}"
+# base_rpc_url: "${DEFAULT_RPC_URLS.base}"
+# bsc_rpc_url: "${DEFAULT_RPC_URLS.bsc}"
+# polygon_rpc_url: "${DEFAULT_RPC_URLS.polygon}"
 `;

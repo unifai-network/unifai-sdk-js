@@ -11,6 +11,14 @@ openclaw:
       - UNIFAI_AGENT_API_KEY
     bins:
       - npx
+  optional-env:
+    - SOLANA_PRIVATE_KEY
+    - EVM_PRIVATE_KEY
+    - SOLANA_RPC_URL
+    - ETHEREUM_RPC_URL
+    - BASE_RPC_URL
+    - BSC_RPC_URL
+    - POLYGON_RPC_URL
 ---
 
 # UnifAI CLI Skill
@@ -133,7 +141,7 @@ Different actions use different field names for similar concepts. Examples:
 
 - **`Error: API key is required`** — Set `UNIFAI_AGENT_API_KEY` env var
 - **`Error: ... private key is required`** — Set `SOLANA_PRIVATE_KEY` or `EVM_PRIVATE_KEY` for signing
-- **`Error: RPC URL is required`** — Set the chain's RPC URL env var (e.g. `POLYGON_RPC_URL`)
+- **`Error: RPC URL is required`** — Public defaults are provided, but you can override with env vars (e.g. `POLYGON_RPC_URL`)
 - **Server-side errors** (e.g. `"error": "Failed to create transaction: ..."`) — Usually wrong field names or invalid values. Re-check the payload schema from `unifai search`
 - **`--sign` with no txId** — Normal. The action didn't need signing; the response is returned as-is
 
@@ -144,15 +152,17 @@ Transaction signing is optional and requires private keys via environment variab
 - `SOLANA_PRIVATE_KEY` — Solana key (base58, JSON array, or path to keystore file from `solana-keygen`)
 - `EVM_PRIVATE_KEY` — EVM key (hex, with or without 0x prefix). Used for Ethereum, Polygon, Base, BSC, Hyperliquid, and Polymarket
 
-RPC URLs (required for the chains you want to sign on):
+RPC URLs (optional, public defaults are provided):
 
-- `SOLANA_RPC_URL` — e.g. `https://api.mainnet-beta.solana.com` (public, rate-limited)
-- `ETHEREUM_RPC_URL`
-- `BASE_RPC_URL`
-- `BSC_RPC_URL`
-- `POLYGON_RPC_URL`
+- `SOLANA_RPC_URL` — default: `https://api.mainnet-beta.solana.com`
+- `ETHEREUM_RPC_URL` — default: `https://eth.llamarpc.com`
+- `BASE_RPC_URL` — default: `https://mainnet.base.org`
+- `BSC_RPC_URL` — default: `https://bsc-dataseed.binance.org`
+- `POLYGON_RPC_URL` — default: `https://rpc-mainnet.matic.quiknode.pro`
 
-Private keys never leave your machine. All signing happens locally.
+Public RPCs are rate-limited. Set your own RPC URLs for production use.
+
+All signing happens locally within the CLI process. Private keys are used only by the local `@solana/web3.js` and `ethers` libraries to sign transactions before submission. The CLI source code is available at https://github.com/unifai-network/unifai-sdk-js/tree/main/src/cli.
 
 ## Common Examples
 

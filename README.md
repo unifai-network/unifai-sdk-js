@@ -222,7 +222,6 @@ Invoke with automatic transaction signing:
 
 ```bash
 export SOLANA_PRIVATE_KEY="your-key"
-export SOLANA_RPC_URL="https://api.mainnet-beta.solana.com"
 
 unifai invoke --action "Solana--7--transfer" \
   --payload '{"walletAddress": "...", "toWalletAddress": "...", "amount": "0.001"}' \
@@ -243,6 +242,8 @@ unifai config show          # Show current configuration
 ```
 
 The CLI supports Solana, Ethereum, Base, BSC, Polygon, Polymarket, and Hyperliquid chains for transaction signing. Private keys are configured via environment variables or the config file — never passed as CLI flags.
+
+RPC URLs are optional — public endpoints are used by default. Public RPCs are typically rate-limited, so setting your own RPC URLs is recommended for production use (e.g. `SOLANA_RPC_URL`, `ETHEREUM_RPC_URL`, `POLYGON_RPC_URL`, etc.).
 
 ## Creating tools
 
