@@ -1,6 +1,6 @@
 ---
 name: unifai
-description: Search, invoke, and sign transactions with UnifAI tools from the command line
+description: A CLI for searching and invoking services on the UnifAI network. Supports 40+ services across DeFi, token data, social media, web search, news, travel, sports, and utilities.
 allowed-tools:
   - Bash(unifai:*)
   - Bash(npx -p unifai-sdk unifai:*)
@@ -21,9 +21,28 @@ openclaw:
     - POLYGON_RPC_URL
 ---
 
-# UnifAI CLI Skill
+# UnifAI CLI
 
-The `unifai` CLI lets you search for tools, invoke actions, and sign blockchain transactions from the command line. It is designed for AI agent use.
+A CLI for searching and invoking services on the UnifAI network. Supports 40+ services across DeFi, token data, social media, web search, news, travel, sports, and utilities.
+
+## What it does
+
+unifai enables you to:
+
+- **Search services**: Find services and actions using natural language queries
+- **Invoke services**: Execute actions with customizable parameters and retry logic
+- **Manage configuration**: Configure API keys with multiple priority levels
+
+### Available service categories
+
+- **DeFi**: Swap, lend, borrow, provide liquidity (Aave, Uniswap, Jupiter, Meteora, Pendle, Compound, 1inch, and more)
+- **Token & market data**: Prices, OHLCV, security analysis (Birdeye, CoinGecko, DexScreener, DefiLlama, GoPlusSecurity)
+- **Wallet & chain data**: Token balances across Solana, Ethereum, Base, BSC, Polygon
+- **Social media**: Twitter/X search, user timelines, tweet threads
+- **Web search & news**: General search, Google news, financial data (SerpAPI, Tavily)
+- **Travel**: Flight and hotel search
+- **Sports**: NBA scores, soccer results (ESPN)
+- **Utilities**: Math, time, domain availability, Solana rent reclaimer
 
 ## Installation
 
