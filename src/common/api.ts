@@ -75,6 +75,7 @@ export class API {
       headers: {
         'Content-Type': 'application/json',
       },
+      paramsSerializer: { indexes: null },
     });
 
     // Create axios instance with proxy support
