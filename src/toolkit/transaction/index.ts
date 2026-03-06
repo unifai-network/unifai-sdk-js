@@ -8,6 +8,7 @@ import { EVMHandler } from './evm-handler';
 import { PolymarketHandler } from './polymarket-handler';
 import { HyperliquidHandler } from './hyperliquid-handler';
 import { JitoHandler } from './jito-handler';
+import { PacificaHandler } from './pacifica-handler';
 
 export class TransactionAPI extends BaseTransactionAPI {
     private solanaHandler: SolanaHandler;
@@ -15,6 +16,7 @@ export class TransactionAPI extends BaseTransactionAPI {
     private polymarketHandler: PolymarketHandler;
     private hyperliquidHandler: HyperliquidHandler;
     private jitoHandler: JitoHandler;
+    private pacificaHandler: PacificaHandler;
 
     constructor(config: APIConfig) {
         super(config);
@@ -26,6 +28,9 @@ export class TransactionAPI extends BaseTransactionAPI {
         );
         this.hyperliquidHandler = new HyperliquidHandler(this.rateLimiter);
         this.jitoHandler = new JitoHandler(this.rateLimiter);
+        this.pacificaHandler = new PacificaHandler(this.rateLimiter, config.maxPollTimes, config.pollInterval,
+            (chain: string, name: string, txData: any) => this.sendTransaction(chain, name, txData)
+        );
     }
 
     // Sign and Sends a transaction to blockchains.
@@ -54,6 +59,8 @@ export class TransactionAPI extends BaseTransactionAPI {
         if (!transactions || transactions.length === 0) {
             throw new Error('No transactions to send.')
         }
+
+        console.log(transactions);
 
         const jitoDecision = this.jitoHandler.shouldUseJito(
             transactions,
@@ -144,7 +151,38 @@ export class TransactionAPI extends BaseTransactionAPI {
                         }
                         break;
                     case 'solana': // Solana
-                        res = await this.solanaHandler.sendTransaction(signer as SolanaSigner, tx, config);
+                        switch (tx.name) {
+                            case 'Pacifica-LimitOrder':
+                                res = await this.pacificaHandler.sendLimitOrderTransaction(
+                                    signer as SolanaSigner,
+                                    tx,
+                                    address,
+                                );
+                                break;
+                            case 'Pacifica-MarketOrder':
+                                res = await this.pacificaHandler.sendMarketOrderTransaction(
+                                    signer as SolanaSigner,
+                                    tx,
+                                    address,
+                                );
+                                break;
+                            case 'Pacifica-CancelOrder':
+                                res = await this.pacificaHandler.sendCancelOrderTransaction(
+                                    signer as SolanaSigner,
+                                    tx,
+                                    address,
+                                );
+                                break;
+                            case 'Pacifica-CancelAllOrders':
+                                res = await this.pacificaHandler.sendCancelAllOrdersTransaction(
+                                    signer as SolanaSigner,
+                                    tx,
+                                    address,
+                                );
+                                break;
+                            default:
+                                res = await this.solanaHandler.sendTransaction(signer as SolanaSigner, tx, config);
+                        }
                         break;
                     case 'hyperliquid': // hyperliquid orders
                         res = await this.hyperliquidHandler.sendTransaction(signer as EtherSigner | WagmiSigner, tx);
