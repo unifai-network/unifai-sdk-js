@@ -180,7 +180,7 @@ export class PacificaHandler {
       );
 
       return {
-        hash: res?.data?.order_id,
+        hash: undefined,
         data: res
       };
     } catch (error) {
@@ -234,7 +234,7 @@ export class PacificaHandler {
       );
 
       return {
-        hash: res?.data?.order_id,
+        hash: undefined,
         data: res
       };
     } catch (error) {

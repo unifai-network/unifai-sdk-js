@@ -60,8 +60,6 @@ export class TransactionAPI extends BaseTransactionAPI {
             throw new Error('No transactions to send.')
         }
 
-        console.log(transactions);
-
         const jitoDecision = this.jitoHandler.shouldUseJito(
             transactions,
             config?.useJito,
