@@ -1,16 +1,19 @@
 ---
 name: unifai
 description: A CLI for searching and invoking services on the UnifAI network. Supports 40+ services across DeFi, token data, social media, web search, news, travel, sports, and utilities.
+author: UnifAI
+license: MIT
+homepage: https://github.com/unifai-network/unifai-sdk-js
+repository: https://github.com/unifai-network/unifai-sdk-js
 allowed-tools:
   - Bash(unifai:*)
-  - Bash(npx -p unifai-sdk unifai:*)
-version: "1.0.0"
+version: "1.0.3"
 openclaw:
   requires:
     env:
       - UNIFAI_AGENT_API_KEY
     bins:
-      - npx
+      - unifai
   optional-env:
     - SOLANA_PRIVATE_KEY
     - EVM_PRIVATE_KEY
@@ -46,12 +49,16 @@ unifai enables you to:
 
 ## Installation
 
-```bash
-# Global install
-npm install -g unifai-sdk
+Install globally so the binary is available locally:
 
-# Or use via npx (no install needed)
-npx -p unifai-sdk unifai <command>
+```bash
+npm install -g unifai-sdk
+```
+
+Or use via npx (no install needed)
+
+```bash
+-npx -p unifai-sdk unifai <command>
 ```
 
 ## Setup
@@ -212,3 +219,8 @@ unifai invoke --action "Birdeye--174--RetrieveTheLatestPrice" \
 unifai search --query "weather forecast"
 unifai search --query "sports scores"
 ```
+
+## Security Notes
+
+- **Private keys**: `SOLANA_PRIVATE_KEY` and `EVM_PRIVATE_KEY` are only needed for transaction signing.
+- **Local signing**: All transaction signing happens locally in-process using `@solana/web3.js` and `ethers`. Private keys are never sent to external API.
