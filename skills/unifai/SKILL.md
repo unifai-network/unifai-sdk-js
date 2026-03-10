@@ -1,27 +1,11 @@
 ---
 name: unifai
 description: A CLI for searching and invoking services on the UnifAI network. Supports 40+ services across DeFi, token data, social media, web search, news, travel, sports, and utilities.
-author: UnifAI
-license: MIT
 homepage: https://github.com/unifai-network/unifai-sdk-js
-repository: https://github.com/unifai-network/unifai-sdk-js
+metadata: {"clawdbot":{"emoji":"🤖","requires":{"bins":["unifai"],"env":["UNIFAI_AGENT_API_KEY"]},"optional-env":["SOLANA_PRIVATE_KEY","EVM_PRIVATE_KEY","SOLANA_RPC_URL","ETHEREUM_RPC_URL","BASE_RPC_URL","BSC_RPC_URL","POLYGON_RPC_URL"],"install":[{"id":"node","kind":"node","package":"unifai-sdk","bins":["unifai"],"label":"Install unifai-sdk (node)"}]}}
 allowed-tools:
   - Bash(unifai:*)
 version: "1.0.3"
-openclaw:
-  requires:
-    env:
-      - UNIFAI_AGENT_API_KEY
-    bins:
-      - unifai
-  optional-env:
-    - SOLANA_PRIVATE_KEY
-    - EVM_PRIVATE_KEY
-    - SOLANA_RPC_URL
-    - ETHEREUM_RPC_URL
-    - BASE_RPC_URL
-    - BSC_RPC_URL
-    - POLYGON_RPC_URL
 ---
 
 # UnifAI CLI
