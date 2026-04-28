@@ -1,4 +1,4 @@
-import { OpenOrder } from "@polymarket/clob-client";
+import { OpenOrder } from "@polymarket/clob-client-v2";
 
 export type PolymarketOpenOrdersRequestParams = {
     id?: string;

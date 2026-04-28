@@ -1,5 +1,5 @@
-import { ApiKeyCreds, Chain, L1PolyHeader } from "@polymarket/clob-client";
-import { get, post, RequestOptions } from '@polymarket/clob-client/dist/http-helpers'
+import { ApiKeyCreds, Chain, L1PolyHeader } from "@polymarket/clob-client-v2";
+import axios from 'axios';
 import { polymarketClobUrl, chainId } from './const';
 import { RateLimiter } from '../../common/rate-limiter';
 
@@ -113,18 +113,31 @@ async function buildClobEip712Signature(address: string, signer: any,
     }
 };
 
+interface RequestOptions {
+    headers?: Record<string, string | number | boolean>;
+    params?: Record<string, any>;
+    data?: any;
+}
+
 async function myGet(endpoint: string, options?: RequestOptions) {
-    return get(endpoint, {
-        ...options,
-        params: { ...options?.params, },
+    // Match the legacy `@polymarket/clob-client/dist/http-helpers` behavior: return
+    // the response body even on non-2xx so deriveApiKey can fall through to
+    // createApiKey when the key does not yet exist.
+    const response = await axios.get(endpoint, {
+        headers: options?.headers,
+        params: { ...options?.params },
+        validateStatus: () => true,
     });
+    return response.data;
 }
 
 async function myPost(endpoint: string, options?: RequestOptions) {
-    return post(endpoint, {
-        ...options,
-        params: { ...options?.params, },
+    const response = await axios.post(endpoint, options?.data, {
+        headers: options?.headers,
+        params: { ...options?.params },
+        validateStatus: () => true,
     });
+    return response.data;
 }
 
 async function createApiKey(address: string, signer: any, rateLimiter?: RateLimiter): Promise<ApiKeyCreds> {

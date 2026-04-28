@@ -1,4 +1,4 @@
-import { ApiKeyCreds } from "@polymarket/clob-client";
+import { ApiKeyCreds } from "@polymarket/clob-client-v2";
 import crypto from "crypto";
 
 export interface L2HeaderArgs {

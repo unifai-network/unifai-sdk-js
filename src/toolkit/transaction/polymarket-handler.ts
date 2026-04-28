@@ -1,5 +1,4 @@
-import { OrderType, ApiKeyCreds } from "@polymarket/clob-client";
-import { orderToJson } from "@polymarket/clob-client/dist/utilities";
+import { OrderType, ApiKeyCreds, isV2Order, orderToJsonV1, orderToJsonV2 } from "@polymarket/clob-client-v2";
 import { EtherSigner, WagmiSigner, isWagmiSigner } from "../types";
 import { RateLimiter } from "../../common";
 import { deriveApiKey } from "../polymarket/apikey";
@@ -39,7 +38,6 @@ export class PolymarketHandler {
       let typedData = od.typedData;
       let orderType = data.orderType || OrderType.FAK; // FOK
 
-      const { signature: existingSignature, ...cleanOrderData } = orderData;
       let signature: string;
 
       if (isWagmiSigner(signer)) {
@@ -50,7 +48,7 @@ export class PolymarketHandler {
           domain: typedData.domain,
           types: typedData.types,
           primaryType: typedData.primaryType,
-          message: cleanOrderData,
+          message: typedData.message,
         });
       } else if (signer.signTypedData) {
         const typesCopy = { ...typedData.types };
@@ -59,7 +57,7 @@ export class PolymarketHandler {
         signature = await signer.signTypedData(
           typedData.domain,
           typesCopy,
-          cleanOrderData
+          typedData.message
         );
       } else {
         throw new Error("Signer doesn't have signTypedData");
@@ -72,7 +70,9 @@ export class PolymarketHandler {
       }
 
       const endpoint = "/order";
-      const orderPayload = orderToJson(orderData, creds?.key || "", orderType);
+      const orderPayload = isV2Order(orderData)
+        ? orderToJsonV2(orderData, creds?.key || "", orderType)
+        : orderToJsonV1(orderData, creds?.key || "", orderType);
 
       const l2HeaderArgs = {
         method: "POST",
