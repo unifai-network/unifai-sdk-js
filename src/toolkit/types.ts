@@ -11,6 +11,7 @@ export interface SendConfig {
     jitoApiKey?: string // jito api key (for original jito provider)
     jitoTipAmount?: number // jito tip amount in lamports
     broadcastMode?: 'sequential' | 'concurrent' // sequential: try rpcs one by one (default), concurrent: send to all rpcs at once, success if any succeeds
+    stuckThreshold?: number // EVM only: when pending-nonce minus latest-nonce strictly exceeds this, replace the oldest stuck nonce with bumped gas. Default 10. Set to a high value to disable.
 }
 
 export type Signer = EtherSigner | WagmiSigner | SolanaSigner;
@@ -20,6 +21,7 @@ export interface EtherSigner {
 
     sendTransaction: (tx: any) => Promise<any>;
     signTypedData: (domain: any, types: any, value: any) => Promise<string>
+    provider?: any // optional: if exposed, smartSend can detect/replace stuck-nonce queues; ethers.Wallet/JsonRpcSigner provide this natively
 }
 
 export interface WagmiSigner {

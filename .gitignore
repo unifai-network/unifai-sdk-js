@@ -38,3 +38,6 @@ coverage/
 *.local
 
 local/
+
+# Local Claude Code state (machine-specific)
+.claude/

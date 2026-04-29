@@ -61,6 +61,7 @@ export function createEVMSignerFromKey(privateKey: string, rpcUrl: string): Ethe
     address: wallet.address,
     sendTransaction: wallet.sendTransaction.bind(wallet),
     signTypedData: wallet.signTypedData.bind(wallet),
+    provider,
   };
 }
 

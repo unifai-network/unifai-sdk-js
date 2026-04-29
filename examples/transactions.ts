@@ -56,6 +56,7 @@ async function run(msg: string) {
       address: evmWallet.address,
       sendTransaction: evmWallet.sendTransaction.bind(evmWallet),
       signTypedData: evmWallet.signTypedData.bind(evmWallet),
+      provider: evmWallet.provider,
     }),
     // Spread Solana signer methods (publicKey, signTransaction)
     ...(solanaKeypair && {

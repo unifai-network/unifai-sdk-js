@@ -140,7 +140,7 @@ export class TransactionAPI extends BaseTransactionAPI {
                                 );
                                 break;
                             default:
-                                res = await this.evmHandler.sendTransaction(signer as EtherSigner | WagmiSigner, tx);
+                                res = await this.evmHandler.sendTransaction(signer as EtherSigner | WagmiSigner, tx, config);
                         }
                         break;
                     case 'solana': // Solana
@@ -150,7 +150,7 @@ export class TransactionAPI extends BaseTransactionAPI {
                         res = await this.hyperliquidHandler.sendTransaction(signer as EtherSigner | WagmiSigner, tx);
                         break;
                     default: // evm
-                        res = await this.evmHandler.sendTransaction(signer as EtherSigner | WagmiSigner, tx);
+                        res = await this.evmHandler.sendTransaction(signer as EtherSigner | WagmiSigner, tx, config);
                 }
 
                 if (res?.hash) {
