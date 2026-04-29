@@ -138,6 +138,54 @@ export async function smartSend(
   return await signer.sendTransaction(txParams);
 }
 
+const TX_WAIT_TIMEOUT_DEFAULT_MS = 5 * 60 * 1000;
+
+function isTimeoutError(e: any): boolean {
+  if (!e) return false;
+  if (e.code === "TIMEOUT") return true;
+  if (typeof e.name === "string" && /timeout/i.test(e.name)) return true;
+  return (
+    typeof e.message === "string" && /(timeout|timed out)/i.test(e.message)
+  );
+}
+
+function timeoutMessage(hash: string, nonce: number | undefined, timeoutMs: number): string {
+  return `tx ${hash}${nonce != null ? ` nonce=${nonce}` : ""} did not confirm within ${timeoutMs}ms`;
+}
+
+/**
+ * Wait for a tx receipt with a hard timeout via ethers v6's
+ * tx.wait(confirms, timeout). On timeout, throws a structured error
+ * including hash + nonce so callers can surface or retry.
+ *
+ * The timeout itself is the leak fix: it bounds the runaway polling
+ * that ethers' bare tx.wait() would otherwise keep alive forever on
+ * a never-confirming tx. Modern ethers v6 (>= ~6.7) properly cleans
+ * up its internal block listener when the timeout fires, so no
+ * manual cleanup is needed here.
+ */
+export async function waitForReceiptWithTimeout(
+  txResponse: any,
+  timeoutMs: number
+): Promise<any> {
+  try {
+    const receipt = await txResponse.wait(1, timeoutMs);
+    if (!receipt) {
+      throw new Error(
+        timeoutMessage(txResponse.hash, txResponse.nonce, timeoutMs)
+      );
+    }
+    return receipt;
+  } catch (e: any) {
+    if (isTimeoutError(e)) {
+      throw new Error(
+        timeoutMessage(txResponse.hash, txResponse.nonce, timeoutMs)
+      );
+    }
+    throw e;
+  }
+}
+
 export class EVMHandler {
   constructor(private rateLimiter?: RateLimiter) {}
 
@@ -183,6 +231,8 @@ export class EVMHandler {
         throw new Error(`signer.sendTransaction: ${error}`);
       }
 
+      const txWaitTimeoutMs = config?.txWaitTimeoutMs ?? TX_WAIT_TIMEOUT_DEFAULT_MS;
+
       let receipt: any;
       if (isWagmiSigner(signer)) {
         const s = signer as WagmiSigner;
@@ -190,7 +240,17 @@ export class EVMHandler {
           await this.rateLimiter?.waitForLimit(
             "evm_waitForTransactionReceipt"
           );
-          receipt = await s.waitForTransactionReceipt({ hash });
+          try {
+            receipt = await s.waitForTransactionReceipt({
+              hash,
+              timeout: txWaitTimeoutMs,
+            } as any);
+          } catch (e: any) {
+            if (isTimeoutError(e)) {
+              throw new Error(timeoutMessage(hash, undefined, txWaitTimeoutMs));
+            }
+            throw e;
+          }
           if (receipt.status != "success") {
             throw new Error("transaction reverted");
           }
@@ -200,7 +260,10 @@ export class EVMHandler {
           await this.rateLimiter?.waitForLimit(
             "evm_waitForTransactionReceipt"
           );
-          receipt = await txResponse.wait();
+          receipt = await waitForReceiptWithTimeout(
+            txResponse,
+            txWaitTimeoutMs
+          );
           if (!receipt || receipt.status == 0) {
             throw new Error("transaction reverted");
           }

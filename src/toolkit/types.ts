@@ -12,6 +12,7 @@ export interface SendConfig {
     jitoTipAmount?: number // jito tip amount in lamports
     broadcastMode?: 'sequential' | 'concurrent' // sequential: try rpcs one by one (default), concurrent: send to all rpcs at once, success if any succeeds
     stuckThreshold?: number // EVM only: when pending-nonce minus latest-nonce strictly exceeds this, replace the oldest stuck nonce with bumped gas. Default 10. Set to a high value to disable.
+    txWaitTimeoutMs?: number // EVM only: maximum time to wait for a sent tx receipt before giving up. Default 5*60*1000 (5min). Bounds the runaway block-listener that historically leaked on the wait() path.
 }
 
 export type Signer = EtherSigner | WagmiSigner | SolanaSigner;
